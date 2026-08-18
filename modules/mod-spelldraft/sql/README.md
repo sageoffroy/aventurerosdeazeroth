@@ -2,12 +2,12 @@
 
 El SQL activo de SpellDraft/Adventurer no se duplica dentro del módulo.
 
-La fuente única para la base `world` es:
+La fuente única para la base `world` está versionada como update pendiente de AzerothCore:
 
 ```text
-data/sql/custom/db_world/spelldraft_adventurer_class_10.sql
+data/sql/updates/pending_db_world/rev_1787027400000000000.sql
 ```
 
-Esa ubicación es parte del pipeline `CUSTOM` oficial de AzerothCore y es descubierta mediante `updates_include`.
+Esto respeta el pipeline normal del updater de AzerothCore. Cuando ese update sea consolidado en el futuro, esta documentación deberá apuntar a su nueva ubicación canónica.
 
-Si se cambia la definición SQL de Adventurer, se modifica **solamente** ese archivo.
+Si cambia la definición SQL de Adventurer antes de consolidar esta rama, se modifica **solamente** ese update.
