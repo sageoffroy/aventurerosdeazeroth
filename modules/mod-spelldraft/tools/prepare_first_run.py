@@ -108,6 +108,16 @@ def main() -> None:
         str(install),
     )
 
+    # AzerothCore only loads the stock playercreateinfo_skills language/racial
+    # rows when SkillRaceClassInfo.dbc also authorizes the race/class pair.
+    # Extend those existing DBC masks to native class 10 before packaging the
+    # same DBC into both the server runtime and the client Z patch.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "patch_adventurer_native_race_skills.py"),
+        str(dbc_src),
+    )
+
     run(
         sys.executable,
         str(TOOLS_DIR / "build_adventurer_client_patch.py"),
