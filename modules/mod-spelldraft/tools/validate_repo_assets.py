@@ -154,7 +154,7 @@ def validate_draft_engine() -> None:
 
     require("prestige_stats" not in draft,
             "minimal draft engine is independent from historical prestige_stats")
-    require("drafted_spells WHERE" not in draft,
+    require("FROM drafted_spells " not in draft and "INTO drafted_spells " not in draft,
             "minimal draft engine does not depend on historical drafted_spells")
 
     stage = read(TOOLS / "stage_lua_runtime.py")
