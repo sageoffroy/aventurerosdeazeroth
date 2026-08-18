@@ -3,12 +3,12 @@
 
 The builder keeps the root and locale MPQs intentionally disjoint:
 
-* Data/patch-Z.mpq contains only the GlueXML override.
-* Data/<locale>/patch-<locale>-z.mpq contains only patched DBC files.
+* Data/patch-Z.mpq contains the GlueXML override.
+* Data/<locale>/patch-<locale>-z.mpq contains the patched DBC files.
 
-This avoids mounting identical payloads twice, which previously caused unstable
-3.3.5a clients. The DBC transformation itself is shared with the server-side
-patcher so client and server always receive the same class definition.
+The same DBC transformation is used for the server and client, so there is one
+canonical class definition. All required source code and GlueXML baselines live
+inside this repository; no historical repository is required at build time.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ import argparse
 import hashlib
 import json
 import shutil
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -32,9 +31,9 @@ from patch_adventurer_class_dbcs import (
 )
 
 MODULE = Path(__file__).resolve().parent.parent
-LEGACY_REPO = "https://github.com/sageoffroy/wowrandom.git"
-LEGACY_COMMIT = "8e2c3c8c89d857164e33dda7db2cccd185467cdb"
-LEGACY_GLUE_PATH = "client-patch/Interface/GlueXML/CharacterCreate.lua"
+BUNDLED_CHARACTER_CREATE = (
+    MODULE / "client-baseline" / "Interface" / "GlueXML" / "CharacterCreate.lua"
+)
 
 DBC_NAMES = (
     "ChrClasses.dbc",
@@ -49,51 +48,22 @@ def sha256(path: Path) -> str:
 
 
 def load_character_create_baseline(explicit: Path | None) -> bytes:
-    """Load the known-good GlueXML baseline.
-
-    Prefer an explicitly supplied file, then a future vendored baseline. Until
-    that baseline is fully migrated into this repository, fall back to the
-    frozen legacy commit. The fallback uses the user's normal Git credentials
-    and fetches only that single commit.
-    """
-
-    if explicit:
-        path = explicit.expanduser().resolve()
-        if not path.is_file():
-            raise SystemExit(f"GlueXML baseline not found: {path}")
-        return path.read_bytes()
-
-    bundled = MODULE / "client-baseline" / "Interface" / "GlueXML" / "CharacterCreate.lua"
-    if bundled.is_file():
-        return bundled.read_bytes()
-
-    with tempfile.TemporaryDirectory(prefix="spelldraft-glue-") as td:
-        repo = Path(td) / "legacy"
-        subprocess.run(["git", "init", "-q", str(repo)], check=True)
-        subprocess.run(
-            ["git", "-C", str(repo), "remote", "add", "origin", LEGACY_REPO],
-            check=True,
+    path = explicit.expanduser().resolve() if explicit else BUNDLED_CHARACTER_CREATE
+    if not path.is_file():
+        raise SystemExit(
+            "CharacterCreate.lua baseline not found: "
+            f"{path}. Restore modules/mod-spelldraft/client-baseline or pass "
+            "--character-create-lua with a known-good 3.3.5a baseline."
         )
-        try:
-            subprocess.run(
-                [
-                    "git", "-C", str(repo), "fetch", "-q", "--depth", "1",
-                    "origin", LEGACY_COMMIT,
-                ],
-                check=True,
-            )
-            return subprocess.check_output(
-                ["git", "-C", str(repo), "show", f"FETCH_HEAD:{LEGACY_GLUE_PATH}"]
-            )
-        except subprocess.CalledProcessError as exc:
-            raise SystemExit(
-                "Could not obtain the frozen CharacterCreate.lua baseline. "
-                "Make sure your GitHub credentials can read sageoffroy/wowrandom, "
-                "or pass --character-create-lua with an extracted baseline."
-            ) from exc
+    return path.read_bytes()
 
 
-def replace_lua_function(text: str, start_marker: str, next_marker: str, replacement: str) -> str:
+def replace_lua_function(
+    text: str,
+    start_marker: str,
+    next_marker: str,
+    replacement: str,
+) -> str:
     start = text.find(start_marker)
     if start < 0:
         raise SystemExit(f"GlueXML patch: missing {start_marker}")
@@ -109,9 +79,14 @@ def adventurer_character_create_lua(baseline: bytes) -> bytes:
     old = "local TECHNICAL_CLASS_ID = 1; -- Warrior; hidden from the player."
     new = "local ADVENTURER_CLASS_INDEX = nil;"
     if old not in text:
-        raise SystemExit("GlueXML baseline does not contain the expected technical-class marker")
+        raise SystemExit(
+            "GlueXML baseline does not contain the expected technical-class marker"
+        )
     text = text.replace(old, new, 1)
 
+    # CharBaseInfo contains exactly one valid class for every playable race.
+    # Resolve that class through Blizzard's own IsRaceClassValid() rather than
+    # depending on localized names or on class ID == enumeration index.
     start = text.find("local function SelectTechnicalClassForCurrentRace()")
     end = text.find("function CharacterCreate_OnLoad(self)", start)
     if start < 0 or end < 0:
@@ -150,6 +125,8 @@ end
 
 """ + text[end:]
 
+    # No stock CharacterCreateClassButton11 exists. Class selection is hidden,
+    # therefore there is no reason to enumerate/render a button per class.
     text = replace_lua_function(
         text,
         "function CharacterCreateEnumerateClasses(...)",
@@ -161,6 +138,9 @@ end
 end""",
     )
 
+    # Update selected-class metadata without touching a non-existent class-11
+    # button. Warrior artwork/flavour remains a safe stock fallback while the
+    # class panel itself is hidden.
     text = replace_lua_function(
         text,
         "function SetCharacterClass(id)",
@@ -187,6 +167,7 @@ end""",
 end""",
     )
 
+    # Reassert the sole valid class immediately before sending character create.
     old_create = """\telse
 \t\tCreateCharacter(CharacterCreateNameEdit:GetText());
 \tend"""
@@ -207,8 +188,6 @@ def copy_patched_server_dbcs(work: Path, destination: Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     for name in DBC_NAMES:
         source = work / name
-        if not source.is_file():
-            continue
         target = destination / name
         if target.exists():
             backup = target.with_name(target.name + ".pre-adventurer.bak")
@@ -219,16 +198,32 @@ def copy_patched_server_dbcs(work: Path, destination: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dbc-src", required=True, type=Path,
-                        help="Directory containing clean/extracted 3.3.5a DBC files")
-    parser.add_argument("--output-dir", type=Path,
-                        default=MODULE / "build" / "adventurer-client-patch")
-    parser.add_argument("--locale", default="esES",
-                        help="Client locale directory, default: esES")
-    parser.add_argument("--server-dbc-dir", type=Path,
-                        help="Optional live server DBC directory to receive the same patched DBCs")
-    parser.add_argument("--character-create-lua", type=Path,
-                        help="Optional extracted CharacterCreate.lua baseline")
+    parser.add_argument(
+        "--dbc-src",
+        required=True,
+        type=Path,
+        help="Directory containing clean/extracted WotLK 3.3.5a DBC files",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=MODULE / "build" / "adventurer-client-patch",
+    )
+    parser.add_argument(
+        "--locale",
+        default="esES",
+        help="Client locale directory, default: esES",
+    )
+    parser.add_argument(
+        "--server-dbc-dir",
+        type=Path,
+        help="Optional live server DBC directory to receive the same patched DBCs",
+    )
+    parser.add_argument(
+        "--character-create-lua",
+        type=Path,
+        help="Optional replacement 3.3.5a CharacterCreate.lua baseline",
+    )
     args = parser.parse_args()
 
     source = args.dbc_src.expanduser().resolve()
@@ -256,12 +251,17 @@ def main() -> None:
         validate_charstartoutfit(work / "CharStartOutfit.dbc")
 
         root_files = {
-            "Interface\\GlueXML\\CharacterCreate.lua": adventurer_character_create_lua(baseline),
+            "Interface\\GlueXML\\CharacterCreate.lua": adventurer_character_create_lua(
+                baseline
+            ),
         }
         locale_files = {
             f"DBFilesClient\\{name}": (work / name).read_bytes()
             for name in DBC_NAMES
         }
+
+        if set(root_files) & set(locale_files):
+            raise SystemExit("Internal error: root and locale MPQ payloads overlap")
 
         root_output.parent.mkdir(parents=True, exist_ok=True)
         locale_output.parent.mkdir(parents=True, exist_ok=True)
@@ -269,7 +269,10 @@ def main() -> None:
         write_mpq(locale_output, locale_files)
 
         if args.server_dbc_dir:
-            copy_patched_server_dbcs(work, args.server_dbc_dir.expanduser().resolve())
+            copy_patched_server_dbcs(
+                work,
+                args.server_dbc_dir.expanduser().resolve(),
+            )
 
     manifest = {
         "class_id": 10,
@@ -279,6 +282,7 @@ def main() -> None:
         "locale_patch": str(locale_output),
         "locale_sha256": sha256(locale_output),
         "dbc_source": str(source),
+        "character_create_baseline_sha256": hashlib.sha256(baseline).hexdigest(),
     }
     (output / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
