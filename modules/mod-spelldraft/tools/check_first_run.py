@@ -27,8 +27,7 @@ REQUIRED_ADVENTURER_DBCS = (
     "SkillLineAbility.dbc",
     "Talent.dbc",
 )
-SPELLDRAFT_SUFFIX = "P"
-ADVENTURER_SUFFIX = "Z"
+PROJECT_SUFFIX = "Z"
 
 
 def mark(ok: bool) -> str:
@@ -114,38 +113,26 @@ def print_client_patch_inventory(client: Path, locale: str) -> None:
     root_names = {name.lower() for name in root_patches}
     locale_names = {name.lower() for name in locale_patches}
 
-    reserved = (
-        (
-            "SpellDraft",
-            SPELLDRAFT_SUFFIX,
-            f"patch-{SPELLDRAFT_SUFFIX}.mpq",
-            f"patch-{locale}-{SPELLDRAFT_SUFFIX.lower()}.mpq",
-        ),
-        (
-            "Aventureros/Adventurer",
-            ADVENTURER_SUFFIX,
-            f"patch-{ADVENTURER_SUFFIX}.mpq",
-            f"patch-{locale}-{ADVENTURER_SUFFIX.lower()}.mpq",
-        ),
-    )
+    root_name = f"patch-{PROJECT_SUFFIX}.mpq"
+    locale_name = f"patch-{locale}-{PROJECT_SUFFIX.lower()}.mpq"
+    occupied = root_name.lower() in root_names or locale_name.lower() in locale_names
+    status = "OCUPADO" if occupied else "LIBRE"
 
-    print("  slots reservados del proyecto:")
-    for label, suffix, root_name, locale_name in reserved:
-        occupied = root_name.lower() in root_names or locale_name.lower() in locale_names
-        status = "OCUPADO" if occupied else "LIBRE"
-        print(
-            f"    [{status}] {suffix} = {label}: "
-            f"Data/{root_name} + Data/{locale}/{locale_name}"
-        )
+    print("  familia oficial del proyecto:")
+    print(
+        f"    [{status}] {PROJECT_SUFFIX} = Aventureros de Azeroth "
+        f"(Adventurer + SpellDraft + DBC/client): "
+        f"Data/{root_name} + Data/{locale}/{locale_name}"
+    )
 
     owner_manifest = client / ".aventureros-spelldraft.json"
     print(
-        f"  [{mark(owner_manifest.is_file())}] manifiesto de ownership SpellDraft: "
+        f"  [{mark(owner_manifest.is_file())}] manifiesto de ownership Aventureros: "
         f"{owner_manifest}"
     )
     print(
-        "  Regla: P y Z no se reasignan. Si un archivo ajeno aparece en uno de "
-        "esos slots, el instalador aborta en vez de sobrescribirlo."
+        "  Regla: Z es la unica familia reservada por Aventureros de Azeroth. "
+        "Si un archivo ajeno ocupa Z, el instalador aborta en vez de sobrescribirlo."
     )
 
 
