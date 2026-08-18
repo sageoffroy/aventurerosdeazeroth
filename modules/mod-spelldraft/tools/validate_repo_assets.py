@@ -76,19 +76,22 @@ def validate_adventurer_baseline() -> None:
 
     native_race_patcher = read(TOOLS / "patch_adventurer_native_race_skills.py")
     native_expectations = {
-        "ADVENTURER_CLASS_MASK = 1 << (ADVENTURER_CLASS - 1)": "native race-skill patch targets class 10",
+        "ADVENTURER_CLASS_MASK = 1 << (ADVENTURER_CLASS - 1)": "native skill patch targets class 10",
         "1: (98, 754)": "Human receives Common through native DBC mapping",
         "2: (109, 125)": "Orc receives Orcish through native DBC mapping",
         "10: (109, 137, 756)": "Blood Elf receives Orcish and Thalassian",
         "11: (98, 759, 760)": "Draenei receives Common and Draenei",
-        "validate_skillraceclassinfo(path)": "native race-skill patch validates the DBC",
+        "163,  # Marksmanship: Auto Shot (75)": "Auto Shot skill line is valid for Adventurer",
+        "762,  # Riding: Apprentice Riding (33388)": "Riding skill line is valid for Adventurer",
+        "777,  # Mounts: Brown Horse (458)": "Mount skill line is valid for Adventurer",
+        "validate_skillraceclassinfo(path)": "native skill patch validates the DBC",
     }
     for token, label in native_expectations.items():
         require(token in native_race_patcher, label)
 
     prepare = read(TOOLS / "prepare_first_run.py")
     require("patch_adventurer_native_race_skills.py" in prepare,
-            "first-run pipeline applies native race/language DBC mappings")
+            "first-run pipeline applies native Adventurer DBC skill mappings")
 
     patcher = read(TOOLS / "patch_adventurer_class_dbcs.py")
     for item_id, label in (
