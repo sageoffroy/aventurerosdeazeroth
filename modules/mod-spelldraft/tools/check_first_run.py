@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import shutil
 from pathlib import Path
@@ -23,11 +24,13 @@ REQUIRED_ADVENTURER_DBCS = (
     "CharStartOutfit.dbc",
     "SkillRaceClassInfo.dbc",
     "Spell.dbc",
+    "SpellDuration.dbc",
     "SkillLine.dbc",
     "SkillLineAbility.dbc",
     "Talent.dbc",
 )
 PROJECT_SUFFIX = "Z"
+CATALOG_ROOT_RE = re.compile(r"^\s*\{ id = (\d+), rarity =", re.MULTILINE)
 
 
 def mark(ok: bool) -> str:
@@ -121,7 +124,7 @@ def print_client_patch_inventory(client: Path, locale: str) -> None:
     print("  familia oficial del proyecto:")
     print(
         f"    [{status}] {PROJECT_SUFFIX} = Aventureros de Azeroth "
-        f"(Adventurer + SpellDraft + DBC/client): "
+        f"(Adventurer + SpellDraft + custom DBC): "
         f"Data/{root_name} + Data/{locale}/{locale_name}"
     )
 
@@ -136,13 +139,60 @@ def print_client_patch_inventory(client: Path, locale: str) -> None:
     )
 
 
+def resolved_replacements(path: Path) -> tuple[bool, dict[int, int]]:
+    if not path.is_file():
+        return False, {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False, {}
+
+    spells = raw.get("spells")
+    if not isinstance(spells, list) or not spells:
+        return False, {}
+
+    replacements: dict[int, int] = {}
+    classes: set[str] = set()
+    for spell in spells:
+        if not isinstance(spell, dict):
+            return False, {}
+        try:
+            custom_id = int(spell["id"])
+            source = int(spell["clone_from"])
+            class_name = str(spell["class"])
+        except (KeyError, TypeError, ValueError):
+            return False, {}
+        if not 201000 <= custom_id <= 201999:
+            return False, {}
+        if source in replacements or custom_id in replacements.values():
+            return False, {}
+        replacements[source] = custom_id
+        classes.add(class_name)
+
+    expected_classes = {
+        "MAGE", "WARRIOR", "WARLOCK", "PRIEST", "DRUID",
+        "ROGUE", "HUNTER", "PALADIN", "SHAMAN",
+    }
+    if "DEATHKNIGHT" in classes or not expected_classes.issubset(classes):
+        return False, {}
+    if replacements.get(116) != 201002:
+        return False, {}
+    return True, replacements
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--install-dir", type=Path, default=DEFAULT_INSTALL)
-    parser.add_argument("--dbc-src", type=Path,
-                        help="Optional clean/extracted DBC source to validate")
-    parser.add_argument("--client-dir", type=Path,
-                        help="Optional WoW 3.3.5a client directory to validate")
+    parser.add_argument(
+        "--dbc-src",
+        type=Path,
+        help="Optional prepared/extracted DBC source to validate",
+    )
+    parser.add_argument(
+        "--client-dir",
+        type=Path,
+        help="Optional WoW 3.3.5a client directory to validate",
+    )
     parser.add_argument("--locale", default=DEFAULT_LOCALE)
     args = parser.parse_args()
 
@@ -210,19 +260,35 @@ def main() -> None:
     baseline = MODULE / "client-baseline" / "Interface" / "GlueXML" / "CharacterCreate.lua"
     print(f"  [{mark(baseline.is_file())}] GlueXML baseline: {baseline}")
     for script in (
+        "apply_normalized_catalog.py",
         "build_adventurer_client_patch.py",
-        "install_adventurer_client_patch.py",
-        "patch_adventurer_class_dbcs.py",
+        "generate_normalized_spells.py",
         "generate_spelldraft_catalog.py",
+        "install_adventurer_client_patch.py",
         "mpq_writer.py",
+        "patch_adventurer_class_dbcs.py",
         "prepare_first_run.py",
         "validate_repo_assets.py",
     ):
         path = TOOLS_DIR / script
         print(f"  [{mark(path.is_file())}] {script}")
 
+    normalized_root = best_path / "spelldraft"
+    if args.dbc_src:
+        normalized_root = args.dbc_src.expanduser().resolve().parent / "spelldraft"
+    resolved_path = normalized_root / "custom_spells.resolved.json"
+    scaling_path = normalized_root / "custom_spell_scaling.tsv"
+    resolved_ok, replacements = resolved_replacements(resolved_path)
+    scaling_ok = scaling_path.is_file() and scaling_path.stat().st_size > 1024
+    if scaling_ok:
+        scaling_text = scaling_path.read_text(encoding="utf-8", errors="replace")
+        scaling_ok = "201002 1 " in scaling_text and "201002 20 " in scaling_text
+    print(f"  [{mark(resolved_ok)}] custom spells resueltos: {resolved_path}")
+    print(f"  [{mark(scaling_ok)}] scaling 1-80 runtime: {scaling_path}")
+
     runtime_catalog = bin_dir / "lua_scripts" / "SpellDraft" / "catalog.lua"
     catalog_ok = runtime_catalog.is_file()
+    custom_replacement_ok = False
     if catalog_ok:
         catalog_text = runtime_catalog.read_text(encoding="utf-8", errors="replace")
         catalog_ok = (
@@ -230,7 +296,17 @@ def main() -> None:
             and "SpellDraftRarityDistribution = {" in catalog_text
             and runtime_catalog.stat().st_size > 1024
         )
+        if catalog_ok and resolved_ok:
+            root_ids = {int(value) for value in CATALOG_ROOT_RE.findall(catalog_text)}
+            custom_replacement_ok = all(
+                source not in root_ids and custom_id in root_ids
+                for source, custom_id in replacements.items()
+            )
     print(f"  [{mark(catalog_ok)}] catalogo real runtime: {runtime_catalog}")
+    print(
+        f"  [{mark(custom_replacement_ok)}] originales <=20 fuera del pool; "
+        "reemplazos 201xxx presentes"
+    )
     print()
 
     if args.dbc_src:
