@@ -123,3 +123,11 @@ __pycache__/
 #  !modules/yourmodule
 #
 # ==================
+
+# ==================
+# Aventureros de Azeroth
+# ==================
+!/modules/mod-ale/
+!/modules/mod-ale/**
+!/modules/mod-spelldraft/
+!/modules/mod-spelldraft/**

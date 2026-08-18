@@ -1,0 +1,14 @@
+[worldserver]
+
+#
+# Aventureros de Azeroth - SpellDraft
+#
+
+#
+# SpellDraft.Enable
+#
+# Activa el sistema SpellDraft.
+#
+# Default: 1
+#
+SpellDraft.Enable = 1
