@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Build the WotLK 3.3.5a client patch for native Adventurer class ID 10.
+"""Build the WotLK 3.3.5a Z client patch for Aventureros de Azeroth.
 
 The builder keeps the root and locale MPQs intentionally disjoint:
 
 * Data/patch-Z.mpq contains the GlueXML override.
 * Data/<locale>/patch-<locale>-z.mpq contains the patched DBC files.
 
-The same DBC transformation is used for the server and client, so there is one
-canonical class definition. All required source code and GlueXML baselines live
-inside this repository; no historical repository is required at build time.
+Z is the single official patch family for Adventurer, SpellDraft and custom
+spells. The same DBC payload is copied to the server runtime and client, so
+custom 201xxx spell rows and their SkillLineAbility associations cannot drift.
 """
 
 from __future__ import annotations
@@ -36,12 +36,22 @@ BUNDLED_CHARACTER_CREATE = (
     MODULE / "client-baseline" / "Interface" / "GlueXML" / "CharacterCreate.lua"
 )
 
-DBC_NAMES = (
+CLASS_DBC_NAMES = (
     "ChrClasses.dbc",
     "CharBaseInfo.dbc",
     "CharStartOutfit.dbc",
     "SkillRaceClassInfo.dbc",
 )
+
+# These are already generated/patched before this packaging stage. They must be
+# byte-identical between worldserver and client or custom spell IDs/tooltips can
+# desync and crash or display the wrong ability.
+SPELLDRAFT_DBC_NAMES = (
+    "Spell.dbc",
+    "SkillLineAbility.dbc",
+)
+
+DBC_NAMES = CLASS_DBC_NAMES + SPELLDRAFT_DBC_NAMES
 
 
 def sha256(path: Path) -> str:
@@ -194,7 +204,7 @@ def main() -> None:
         "--dbc-src",
         required=True,
         type=Path,
-        help="Directory containing clean/extracted WotLK 3.3.5a DBC files",
+        help="Directory containing prepared WotLK 3.3.5a DBC files",
     )
     parser.add_argument(
         "--output-dir",
@@ -274,6 +284,7 @@ def main() -> None:
         "locale_patch": str(locale_output),
         "locale_sha256": sha256(locale_output),
         "dbc_source": str(source),
+        "dbc_payload": list(DBC_NAMES),
         "character_create_baseline_sha256": hashlib.sha256(baseline).hexdigest(),
     }
     (output / "manifest.json").write_text(
@@ -284,10 +295,11 @@ def main() -> None:
     if manifest["root_sha256"] == manifest["locale_sha256"]:
         raise SystemExit("Safety check failed: root and locale MPQs are byte-identical")
 
-    print("Adventurer client patch built successfully:")
+    print("Aventureros de Azeroth client patch built successfully:")
     print(f"  root:   {root_output}")
     print(f"  locale: {locale_output}")
     print("  validation: exactly one Adventurer class per playable race")
+    print("  custom spell DBCs: Spell.dbc + SkillLineAbility.dbc packaged in Z")
     if args.server_dbc_dir:
         print(f"  server DBCs updated: {args.server_dbc_dir.expanduser().resolve()}")
 
