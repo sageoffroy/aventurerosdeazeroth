@@ -18,6 +18,7 @@ MODULE = TOOLS_DIR.parent
 REPO = MODULE.parents[1]
 DEFAULT_INSTALL = REPO / "env" / "dist"
 DEFAULT_OUTPUT = MODULE / "build" / "adventurer-client-patch"
+DEFAULT_LOCALE = "esMX"
 REQUIRED_DBCS = (
     "ChrClasses.dbc",
     "CharBaseInfo.dbc",
@@ -51,7 +52,7 @@ def main() -> None:
         type=Path,
         help="Clean/extracted DBC source; default: <server-data-dir>/dbc",
     )
-    parser.add_argument("--locale", default="esES")
+    parser.add_argument("--locale", default=DEFAULT_LOCALE)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 
@@ -89,8 +90,6 @@ def main() -> None:
     print(f"client:        {client}")
     print(f"locale:        {args.locale}")
 
-    # Fail before touching configs, DBCs or the client if the checked-in
-    # bootstrap is internally inconsistent.
     run(sys.executable, str(TOOLS_DIR / "validate_repo_assets.py"))
 
     run(
@@ -102,8 +101,6 @@ def main() -> None:
         str(data_dir),
     )
 
-    # The original C++ build already installed ALE. Stage the current Lua tree
-    # directly so Lua-only SpellDraft changes never force a costly C++ rebuild.
     run(
         sys.executable,
         str(TOOLS_DIR / "stage_lua_runtime.py"),
@@ -144,6 +141,8 @@ def main() -> None:
         str(dbc_src),
         "--client-dir",
         str(client),
+        "--locale",
+        args.locale,
     )
 
     print()
