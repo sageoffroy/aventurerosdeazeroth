@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """Build the WotLK 3.3.5a Z client patch for Aventureros de Azeroth.
 
-The builder keeps the root and locale MPQs intentionally disjoint:
+The builder keeps the Adventurer class DBCs in the locale patch, while the
+custom SpellDraft DBCs are intentionally present in BOTH Z archives:
 
-* Data/patch-Z.mpq contains the GlueXML override.
-* Data/<locale>/patch-<locale>-z.mpq contains the patched DBC files.
+* Data/patch-Z.mpq contains the GlueXML override plus Spell.dbc and
+  SkillLineAbility.dbc.
+* Data/<locale>/patch-<locale>-z.mpq contains all patched DBC files.
+
+Duplicating the two custom-spell DBCs is deliberate. WotLK clients in the wild
+use different patch stacks/load orders; keeping the exact same SpellDraft bytes
+in root Z and locale Z prevents custom 201xxx spell rows from disappearing
+behind another locale archive while preserving the existing class-10 patch.
 
 Z is the single official patch family for Adventurer, SpellDraft and custom
 spells. The same DBC payload is copied to the server runtime and client, so
@@ -256,14 +263,32 @@ def main() -> None:
             "Interface\\GlueXML\\CharacterCreate.lua": adventurer_character_create_lua(
                 baseline
             ),
+            **{
+                f"DBFilesClient\\{name}": (work / name).read_bytes()
+                for name in SPELLDRAFT_DBC_NAMES
+            },
         }
         locale_files = {
             f"DBFilesClient\\{name}": (work / name).read_bytes()
             for name in DBC_NAMES
         }
 
-        if set(root_files) & set(locale_files):
-            raise SystemExit("Internal error: root and locale MPQ payloads overlap")
+        # The two SpellDraft DBCs intentionally exist in both archives and MUST
+        # be byte-identical. Everything else remains disjoint.
+        shared = set(root_files) & set(locale_files)
+        expected_shared = {
+            f"DBFilesClient\\{name}" for name in SPELLDRAFT_DBC_NAMES
+        }
+        if shared != expected_shared:
+            raise SystemExit(
+                "Internal error: unexpected root/locale MPQ overlap: "
+                + ", ".join(sorted(shared))
+            )
+        for internal_name in expected_shared:
+            if root_files[internal_name] != locale_files[internal_name]:
+                raise SystemExit(
+                    f"Internal error: duplicated payload differs for {internal_name}"
+                )
 
         root_output.parent.mkdir(parents=True, exist_ok=True)
         locale_output.parent.mkdir(parents=True, exist_ok=True)
@@ -285,6 +310,7 @@ def main() -> None:
         "locale_sha256": sha256(locale_output),
         "dbc_source": str(source),
         "dbc_payload": list(DBC_NAMES),
+        "root_custom_spell_dbc_payload": list(SPELLDRAFT_DBC_NAMES),
         "character_create_baseline_sha256": hashlib.sha256(baseline).hexdigest(),
     }
     (output / "manifest.json").write_text(
@@ -299,7 +325,7 @@ def main() -> None:
     print(f"  root:   {root_output}")
     print(f"  locale: {locale_output}")
     print("  validation: exactly one Adventurer class per playable race")
-    print("  custom spell DBCs: Spell.dbc + SkillLineAbility.dbc packaged in Z")
+    print("  custom spell DBCs: Spell.dbc + SkillLineAbility.dbc packaged in root Z + locale Z")
     if args.server_dbc_dir:
         print(f"  server DBCs updated: {args.server_dbc_dir.expanduser().resolve()}")
 
