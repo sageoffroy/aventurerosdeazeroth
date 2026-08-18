@@ -14,6 +14,9 @@ REPO = MODULE.parents[1]
 ADVENTURER_WORLD_SQL = (
     REPO / "data/sql/updates/pending_db_world/rev_1787027400000000000.sql"
 )
+SPELLDRAFT_CHARACTER_SQL = (
+    REPO / "data/sql/updates/pending_db_characters/rev_1787076000000000000.sql"
+)
 sys.path.insert(0, str(TOOLS))
 
 
@@ -74,20 +77,23 @@ def validate_adventurer_baseline() -> None:
     require("SetLanguageSkill" not in resources,
             "Lua resource layer owns resources only")
 
-    native_race_patcher = read(TOOLS / "patch_adventurer_native_race_skills.py")
+    native_skill_patcher = read(TOOLS / "patch_adventurer_native_race_skills.py")
     native_expectations = {
         "ADVENTURER_CLASS_MASK = 1 << (ADVENTURER_CLASS - 1)": "native skill patch targets class 10",
         "1: (98, 754)": "Human receives Common through native DBC mapping",
         "2: (109, 125)": "Orc receives Orcish through native DBC mapping",
         "10: (109, 137, 756)": "Blood Elf receives Orcish and Thalassian",
         "11: (98, 759, 760)": "Draenei receives Common and Draenei",
-        "163,  # Marksmanship: Auto Shot (75)": "Auto Shot skill line is valid for Adventurer",
-        "762,  # Riding: Apprentice Riding (33388)": "Riding skill line is valid for Adventurer",
-        "777,  # Mounts: Brown Horse (458)": "Mount skill line is valid for Adventurer",
+        "163,  # Marksmanship: Auto Shot (75)": "Auto Shot skill line is validated",
+        "762,  # Riding: Apprentice Riding (33388)": "Riding skill line is validated",
+        "777,  # Mounts: Brown Horse (458)": "Mount skill line is validated",
+        "ensure_classless_class_skill_rows": "all class-bound skill lines are authorized for classless Adventurer",
+        "set_u32(clone, 2, 0)": "classless skill mappings apply to every race",
+        "set_u32(clone, 3, ADVENTURER_CLASS_MASK)": "classless skill mappings affect class 10 only",
         "validate_skillraceclassinfo(path)": "native skill patch validates the DBC",
     }
     for token, label in native_expectations.items():
-        require(token in native_race_patcher, label)
+        require(token in native_skill_patcher, label)
 
     prepare = read(TOOLS / "prepare_first_run.py")
     require("patch_adventurer_native_race_skills.py" in prepare,
@@ -107,17 +113,53 @@ def validate_sql() -> None:
     print("\nSQL")
     sql = read(ADVENTURER_WORLD_SQL)
     require("SET @ADVENTURER_CLASS := 10" in sql,
-            "pending SQL targets class 10")
+            "pending world SQL targets class 10")
     require("SET @ADVENTURER_CLASS_MASK := 512" in sql,
-            "pending SQL targets class mask 512")
+            "pending world SQL targets class mask 512")
     require("playercreateinfo" in sql and "player_class_stats" in sql,
-            "pending SQL provides creation rows and class stats")
+            "pending world SQL provides creation rows and class stats")
+
+    character_sql = read(SPELLDRAFT_CHARACTER_SQL)
+    require("CREATE TABLE IF NOT EXISTS `spelldraft_drafted_spells`" in character_sql,
+            "character SQL persists drafted spells")
+    require("CREATE TABLE IF NOT EXISTS `spelldraft_pending_offer`" in character_sql,
+            "character SQL persists the pending offer")
+
     require(not (MODULE / "sql/adventurer_class_10.sql").exists(),
             "there is no duplicate active module SQL copy")
     require(
         not (REPO / "data/sql/custom/db_world/spelldraft_adventurer_class_10.sql").exists(),
         "there is no nonstandard custom SQL copy",
     )
+
+
+def validate_draft_engine() -> None:
+    print("\nSPELLDRAFT MINIMAL ENGINE")
+    draft = read(MODULE / "lua/SpellDraft/draft.lua")
+    expectations = {
+        "local CLASS_ADVENTURER = 10": "draft engine is class-10-only",
+        "local STARTING_DRAFTS = 5": "first character receives five bootstrap drafts",
+        'msg == "SC_CHECK"': "historical addon SC_CHECK protocol is supported",
+        'msg:match("^SC:(%d+)$")': "historical addon card-pick protocol is supported",
+        'player:SendAddonMessage("SpellChoice"': "server sends card offers to the existing addon",
+        "spelldraft_drafted_spells": "draft picks use new persistence",
+        "spelldraft_pending_offer": "pending offers survive reconnects",
+        "local draftedCache = {}": "draft picks are cached against async DB races",
+        "local pendingOfferCache = {}": "pending offers are cached against async DB races",
+        "RegisterPlayerEvent(19, OnProtocolWhisper)": "self-whisper protocol hook is registered",
+        "RegisterPlayerEvent(4, OnLogout)": "session caches are cleared on logout",
+    }
+    for token, label in expectations.items():
+        require(token in draft, label)
+
+    require("prestige_stats" not in draft,
+            "minimal draft engine is independent from historical prestige_stats")
+    require("drafted_spells WHERE" not in draft,
+            "minimal draft engine does not depend on historical drafted_spells")
+
+    stage = read(TOOLS / "stage_lua_runtime.py")
+    require('source.rglob("*.lua")' in stage,
+            "runtime staging includes the new draft.lua automatically")
 
 
 def validate_client_pipeline() -> None:
@@ -160,6 +202,7 @@ def main() -> None:
     validate_core()
     validate_adventurer_baseline()
     validate_sql()
+    validate_draft_engine()
     validate_client_pipeline()
     print("\nALL SPELLDRAFT BOOTSTRAP CHECKS PASSED")
 
