@@ -1,51 +1,80 @@
 # SpellDraft
 
-SpellDraft es el sistema de progresión sin clases de
-**Aventureros de Azeroth**, basado en AzerothCore WotLK 3.3.5a.
+SpellDraft es el sistema de progresión sin clases de **Aventureros de Azeroth** sobre AzerothCore WotLK 3.3.5a.
 
-## Estado
+## Estado actual
 
-Bootstrap inicial.
+La primera base nativa ya existe y compila:
 
-Todavía NO implementa:
+- `mod-ale` integrado y fijado a una revisión conocida.
+- `mod-spelldraft` cargado como módulo estático normal de AzerothCore.
+- clase nativa `CLASS_ADVENTURER = 10`.
+- Adventurer disponible como base para todas las razas jugables.
+- baseline de armas, armaduras, raciales, idiomas, equitación y acciones universales.
+- parcheador DBC único para servidor y cliente.
+- SQL re-aplicable registrado en `data/sql/custom/db_world/`.
+- generador seguro del par de MPQ del cliente.
 
-- Adventurer / class ID 10
-- draft de habilidades
-- cartas
-- hechizos personalizados
-- DBC personalizados
-- patches MPQ
-- AddOn del cliente
+El sistema de cartas/draft todavía se desarrollará encima de esta base.
 
-Esas piezas se incorporarán progresivamente sobre esta base.
+## Adventurer
+
+La clase 10 es el contenedor técnico universal. SpellDraft controla la build.
+
+Baseline de nivel 1:
+
+- Worn Short Sword — item 25
+- Worn Wooden Shield — item 2362
+- Worn Short Bow — item 2504
+- Rough Arrow — item 2512
+- Riding 75 — skill 762
+- Apprentice Riding — spell 33388
+- Brown Horse — spell 458
+- Auto Shot — spell 75
+- Shoot — spell 5019
+- Throw — spell 2764
+- Dodge / Parry / Block
+- todas las proficiencias de armas y armaduras
+- raciales e idiomas de la raza elegida
+
+Ver `ADVENTURER.md` para la definición funcional.
 
 ## Arquitectura
 
-SpellDraft es un módulo normal de AzerothCore:
+```text
+modules/mod-spelldraft/
+├── src/        integración nativa C++
+├── lua/        lógica dinámica mediante ALE
+├── conf/       configuración
+├── sql/        SQL canónico del módulo
+└── tools/      builders y validadores de DBC/cliente
+```
 
-    modules/mod-spelldraft/
+El SQL que debe descubrir AzerothCore en runtime también vive, en forma re-aplicable, en:
 
-La lógica que necesite scripting dinámico utilizará:
+```text
+data/sql/custom/db_world/spelldraft_adventurer_class_10.sql
+```
 
-    modules/mod-ale/
+## Pipeline DBC y cliente
 
-No se utilizarán instaladores que modifiquen silenciosamente archivos del core.
+Una sola transformación (`patch_adventurer_class_dbcs.py`) define los DBC de clase 10 para servidor y cliente. No se editan DBC binarios a mano.
 
-Los cambios necesarios sobre AzerothCore deberán quedar versionados
-explícitamente en el repositorio Aventureros de Azeroth.
+El builder de cliente produce dos archivos deliberadamente distintos:
 
-## Directorios
+```text
+Data/patch-Z.mpq
+Data/esES/patch-esES-z.mpq
+```
 
-    src/     integración C++ con AzerothCore
-    lua/     lógica dinámica ejecutada mediante ALE
-    conf/    configuración del servidor
+El primero contiene GlueXML; el segundo contiene los DBC Adventurer. Esta separación evita el layout duplicado que daba problemas al cliente 3.3.5a.
 
 ## Principios
 
 1. Un solo sistema SpellDraft.
-2. No crear pipelines paralelos.
-3. No editar DBC binarios manualmente.
-4. No parchear archivos C++ mediante búsquedas/reemplazos durante instalación.
-5. Todo cambio al core debe existir como código normal en Git.
-6. main permanece estable.
-7. Desarrollo en ramas agent/* hasta ser probado.
+2. Un solo pipeline DBC para servidor y cliente.
+3. No editar binarios DBC a mano.
+4. No usar un `install.sh` que parchee silenciosamente el core.
+5. Los cambios al core quedan versionados explícitamente.
+6. `main` permanece estable.
+7. El desarrollo continúa en ramas `agent/*` hasta ser probado.
