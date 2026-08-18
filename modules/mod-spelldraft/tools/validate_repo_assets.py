@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -55,6 +56,8 @@ def validate_core() -> None:
     loader = read(MODULE / "src/SpellDraft_loader.cpp")
     require("AddAdventurerClassScripts" in loader,
             "module loader registers Adventurer")
+    require("AddCustomSpellScalingScripts" in loader,
+            "module loader registers normalized custom spell scaling")
 
 
 def validate_adventurer_baseline() -> None:
@@ -176,6 +179,103 @@ def validate_real_catalog_pipeline() -> None:
         require(f'"{dbc}"' in prepare, f"first-run requires {dbc}")
 
 
+def validate_normalized_spells() -> None:
+    print("\nNORMALIZED CUSTOM SPELLS")
+    registry_path = MODULE / "custom_spells.json"
+    registry_text = read(registry_path)
+    registry = json.loads(registry_text)
+    require(registry.get("version") == 2,
+            "custom spell registry uses normalized-spell schema v2")
+    require(registry.get("custom_id_range") == [201000, 201999],
+            "custom spell IDs stay in reserved 201000-201999 range")
+    selection = registry.get("selection", {})
+    require(selection.get("max_first_rank_level") == 20,
+            "initial normalized cohort selects first ranks through level 20")
+    require("DEATHKNIGHT" in selection.get("exclude_classes", []),
+            "Death Knight is excluded from the initial normalized cohort")
+    require(selection.get("include_talents") is False,
+            "initial normalized cohort remains non-talent SpellDraft abilities")
+
+    pinned = {
+        int(entry["clone_from"]): int(entry["id"])
+        for entry in registry.get("pinned", [])
+    }
+    for source, custom in (
+        (100, 201000),
+        (2912, 201001),
+        (116, 201002),
+        (133, 201003),
+        (8921, 201004),
+        (585, 201005),
+        (14914, 201006),
+    ):
+        require(pinned.get(source) == custom,
+                f"legacy normalized spell identity preserved: {source} -> {custom}")
+
+    normalizer = read(TOOLS / "generate_normalized_spells.py")
+    normalizer_expectations = {
+        "build_catalog(": "normalizer reuses exact production SpellDraft eligibility",
+        "parse_spell_ranks": "normalizer reads canonical rank families",
+        '"SpellDuration.dbc"': "normalizer reads native rank durations",
+        "collapse": "duplicate-level rank policy is documented in generator",
+        "DEFAULT_PINNED_IDS": "normalizer preserves established custom IDs",
+        "EFFECT_DIE_SIDES": "normalizer owns native random effect ranges",
+        "EFFECT_REAL_POINTS_PER_LEVEL": "normalizer disables hidden native per-level scaling on custom effects",
+        "custom_spell_scaling.tsv": "normalizer documents runtime scaling output",
+        "replace_original": "resolved registry marks native cards for replacement",
+    }
+    for token, label in normalizer_expectations.items():
+        require(token in normalizer, label)
+
+    replacement = read(TOOLS / "apply_normalized_catalog.py")
+    require("native roots survived normalized catalog replacement" in replacement,
+            "catalog replacement aborts if an original card survives")
+    require("missing_custom" in replacement,
+            "catalog replacement aborts if a custom card is missing")
+    require("catalog cardinality changed unexpectedly" in replacement,
+            "catalog replacement is strict one-for-one")
+    require("minLevel = 1" in replacement,
+            "normalized custom cards are available from level 1")
+
+    scaling = read(MODULE / "src/CustomSpellScaling.cpp")
+    require("PLAYERHOOK_ON_SPELL_CAST" in scaling and "OnPlayerSpellCast" in scaling,
+            "runtime scales custom values before spell execution")
+    require("SetSpellValue" in scaling,
+            "runtime uses AzerothCore SpellValue overrides")
+    require("SPELLVALUE_BASE_POINT0" in scaling and "SPELLVALUE_BASE_POINT2" in scaling,
+            "runtime supports all three effect amount slots")
+    require("SPELLVALUE_AURA_DURATION" in scaling,
+            "runtime supports rank-dependent aura durations")
+    require('GetOption<std::string>("DataDir"' in scaling,
+            "runtime scaling table is loaded from worldserver DataDir")
+    require("201000" in scaling and "201999" in scaling,
+            "runtime accepts only reserved custom spell IDs")
+
+    world_script = read(MODULE / "src/SpellDraftWorldScript.cpp")
+    require("ConfigureCustomSpellScaling(enabled)" in world_script,
+            "normalized runtime follows SpellDraft.Enable and config reloads")
+
+    builder = read(TOOLS / "build_adventurer_client_patch.py")
+    require('"Spell.dbc"' in builder and '"SkillLineAbility.dbc"' in builder,
+            "Z packages normalized spell DBCs for the client")
+    require("SPELLDRAFT_DBC_NAMES" in builder,
+            "custom spell DBC payload is explicit in Z builder")
+
+    prepare = read(TOOLS / "prepare_first_run.py")
+    require('"SpellDuration.dbc"' in prepare,
+            "first-run requires SpellDuration.dbc for rank-duration anchors")
+    require("generate_normalized_spells.py" in prepare,
+            "first-run generates normalized custom spell DBCs")
+    require("apply_normalized_catalog.py" in prepare,
+            "first-run replaces native draft cards with custom cards")
+    require(
+        prepare.index("generate_normalized_spells.py")
+        < prepare.index("generate_spelldraft_catalog.py")
+        < prepare.index("apply_normalized_catalog.py"),
+        "first-run orders normalize -> base catalog -> strict replacement",
+    )
+
+
 def validate_draft_engine() -> None:
     print("\nSPELLDRAFT REAL ENGINE")
     draft = read(MODULE / "lua/SpellDraft/draft.lua")
@@ -254,6 +354,7 @@ def main() -> None:
     validate_adventurer_baseline()
     validate_sql()
     validate_real_catalog_pipeline()
+    validate_normalized_spells()
     validate_draft_engine()
     validate_client_pipeline()
     print("\nALL SPELLDRAFT CHECKS PASSED")
