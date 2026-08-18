@@ -11,6 +11,9 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parent
 MODULE = TOOLS.parent
 REPO = MODULE.parents[1]
+ADVENTURER_WORLD_SQL = (
+    REPO / "data/sql/updates/pending_db_world/rev_1787027400000000000.sql"
+)
 sys.path.insert(0, str(TOOLS))
 
 
@@ -77,20 +80,19 @@ def validate_adventurer_baseline() -> None:
 
 def validate_sql() -> None:
     print("\nSQL")
-    sql_path = REPO / "data/sql/custom/db_world/spelldraft_adventurer_class_10.sql"
-    sql = read(sql_path)
+    sql = read(ADVENTURER_WORLD_SQL)
     require("SET @ADVENTURER_CLASS := 10" in sql,
-            "canonical SQL targets class 10")
+            "pending SQL targets class 10")
     require("SET @ADVENTURER_CLASS_MASK := 512" in sql,
-            "canonical SQL targets class mask 512")
+            "pending SQL targets class mask 512")
     require("playercreateinfo" in sql and "player_class_stats" in sql,
-            "canonical SQL provides creation rows and class stats")
+            "pending SQL provides creation rows and class stats")
     require(not (MODULE / "sql/adventurer_class_10.sql").exists(),
             "there is no duplicate active module SQL copy")
-
-    include = read(REPO / "data/sql/base/db_world/updates_include.sql")
-    require("$/data/sql/custom/db_world" in include and "'CUSTOM'" in include,
-            "AzerothCore updater includes custom db_world SQL")
+    require(
+        not (REPO / "data/sql/custom/db_world/spelldraft_adventurer_class_10.sql").exists(),
+        "there is no nonstandard custom SQL copy",
+    )
 
 
 def validate_client_pipeline() -> None:
