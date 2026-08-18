@@ -68,6 +68,17 @@ def validate_adventurer_baseline() -> None:
     for token, label in expectations.items():
         require(token in cpp, label)
 
+    resources = read(MODULE / "lua/SpellDraft/resources.lua")
+    language_expectations = {
+        "LANGUAGE_COMMON = 98": "Common language skill 98",
+        "LANGUAGE_ORCISH = 109": "Orcish language skill 109",
+        "LANGUAGE_THALASSIAN = 137": "Thalassian language skill 137",
+        "EnsurePlayerLanguages(player)": "language repair runs on login",
+        "player:SetSkill(skillId, 1, 300, 300)": "language repair restores 300/300 skill",
+    }
+    for token, label in language_expectations.items():
+        require(token in resources, label)
+
     patcher = read(TOOLS / "patch_adventurer_class_dbcs.py")
     for item_id, label in (
         (25, "Worn Short Sword"),
