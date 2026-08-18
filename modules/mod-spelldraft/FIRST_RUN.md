@@ -25,7 +25,7 @@ No cambiar a `main`.
 
 ## 2. Preparar DBC + patch de cliente
 
-Se necesita un directorio con los DBC 3.3.5a limpios/extractados que contenga, como mínimo:
+Se necesita un directorio con los DBC 3.3.5a limpios/extractados que contenga:
 
 ```text
 ChrClasses.dbc
@@ -57,9 +57,15 @@ El builder conserva backups `.pre-adventurer.bak` si modifica DBC existentes del
 
 ### GlueXML
 
-Mientras terminamos de migrar el baseline de GlueXML al nuevo repositorio, el builder obtiene automáticamente el baseline conocido del commit congelado del repo histórico `wowrandom`, usando las credenciales Git normales del propietario. Esto es únicamente una fuente de baseline de cliente; la lógica Adventurer se genera en este repositorio.
+El baseline conocido de `CharacterCreate.lua` ya está versionado dentro del propio proyecto:
 
-También puede pasarse manualmente un baseline con:
+```text
+modules/mod-spelldraft/client-baseline/Interface/GlueXML/CharacterCreate.lua
+```
+
+Su procedencia está documentada en `client-baseline/README.md`. El builder transforma ese baseline en memoria y genera el MPQ de manera determinista; **no necesita `wowrandom` ni otro repositorio durante el uso normal**.
+
+Si alguna vez se quiere probar otro baseline 3.3.5a, puede pasarse explícitamente:
 
 ```text
 --character-create-lua /ruta/CharacterCreate.lua
@@ -87,15 +93,38 @@ No toca otros MPQ del cliente.
 
 ## 4. Base de datos world
 
-La definición re-aplicable de Adventurer está registrada en:
+La **única fuente SQL activa** de Adventurer está en:
 
 ```text
 data/sql/custom/db_world/spelldraft_adventurer_class_10.sql
 ```
 
-Con el actualizador SQL de AzerothCore habilitado, debe aplicarse al iniciar `worldserver` desde esta distribución. Si el actualizador está deshabilitado, importar ese archivo manualmente en `acore_world` antes de crear el personaje.
+AzerothCore incluye oficialmente `$/data/sql/custom/db_world` como fuente `CUSTOM` mediante `updates_include`, y `worldserver.conf.dist` trae por defecto:
 
-## 5. Configuración
+```ini
+Updates.EnableDatabases = 7
+Updates.AutoSetup = 1
+```
+
+Por lo tanto, con una instalación normal el `worldserver` puede descubrir/aplicar ese SQL. Si el actualizador está deshabilitado en la configuración real, importar ese archivo manualmente en `acore_world` antes de crear el personaje.
+
+## 5. Datos runtime del servidor
+
+`worldserver.conf.dist` usa por defecto:
+
+```ini
+DataDir = "."
+```
+
+Eso significa que el directorio desde el que se lance `worldserver` debe poder resolver sus datos (`dbc`, `maps`, `vmaps`, `mmaps`) según la configuración efectiva. Antes de la primera ejecución conviene correr:
+
+```bash
+python3 modules/mod-spelldraft/tools/check_first_run.py
+```
+
+El chequeo no modifica nada; solamente informa qué falta y qué rutas encontró.
+
+## 6. Configuración
 
 Después de instalar por primera vez, crear los `.conf` reales desde sus `.dist` si todavía no existen:
 
@@ -112,7 +141,7 @@ SpellDraft debe quedar:
 SpellDraft.Enable = 1
 ```
 
-## 6. Primera validación dentro del juego
+## 7. Primera validación dentro del juego
 
 Crear **un personaje nuevo**. No reutilizar un personaje creado antes del patch.
 
@@ -135,7 +164,7 @@ Debe ocurrir lo siguiente:
 - Dodge / Parry / Block
 - proficiencias universales de armas y armaduras
 
-## 7. Si algo falla
+## 8. Si algo falla
 
 No modificar DBC ni SQL a mano. Guardar:
 
