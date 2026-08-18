@@ -410,8 +410,8 @@ local function OnProtocolWhisper(_, player, msg, _, _, receiver)
         return
     end
 
-    -- The compatibility protocol is deliberately a self-whisper. Do not let a
-    -- player trigger SC:* commands by whispering another player.
+    -- SAY is the canonical hidden transport in Aventureros. The receiver check
+    -- remains only for the legacy self-whisper compatibility listener.
     if receiver and receiver:GetGUIDLow() ~= player:GetGUIDLow() then
         return
     end
@@ -483,7 +483,8 @@ local function OnLevelChanged(_, player)
     end, 1000, 1)
 end
 
-RegisterPlayerEvent(19, OnProtocolWhisper) -- PLAYER_EVENT_ON_WHISPER
+RegisterPlayerEvent(18, OnProtocolWhisper) -- PLAYER_EVENT_ON_CHAT (SC transport)
+RegisterPlayerEvent(19, OnProtocolWhisper) -- PLAYER_EVENT_ON_WHISPER (legacy compatibility)
 RegisterPlayerEvent(3, OnLogin)            -- PLAYER_EVENT_ON_LOGIN
 RegisterPlayerEvent(4, OnLogout)           -- PLAYER_EVENT_ON_LOGOUT
 RegisterPlayerEvent(13, OnLevelChanged)    -- PLAYER_EVENT_ON_LEVEL_CHANGE
