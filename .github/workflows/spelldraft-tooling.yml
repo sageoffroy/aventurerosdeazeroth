@@ -1,0 +1,36 @@
+name: SpellDraft tooling
+
+on:
+  push:
+    branches:
+      - agent/spelldraft-bootstrap
+    paths:
+      - "modules/mod-spelldraft/**"
+      - "data/sql/custom/db_world/spelldraft_adventurer_class_10.sql"
+      - "src/server/shared/SharedDefines.h"
+      - "src/server/shared/enuminfo_SharedDefines.cpp"
+      - "src/server/game/Entities/Unit/StatSystem.cpp"
+      - ".github/workflows/spelldraft-tooling.yml"
+  pull_request:
+    paths:
+      - "modules/mod-spelldraft/**"
+      - "data/sql/custom/db_world/spelldraft_adventurer_class_10.sql"
+      - "src/server/shared/SharedDefines.h"
+      - "src/server/shared/enuminfo_SharedDefines.cpp"
+      - "src/server/game/Entities/Unit/StatSystem.cpp"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Validate SpellDraft bootstrap assets
+        run: python3 modules/mod-spelldraft/tools/validate_repo_assets.py
