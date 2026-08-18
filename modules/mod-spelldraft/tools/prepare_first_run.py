@@ -127,12 +127,12 @@ def main() -> None:
         str(install),
     )
 
-    # Normalize the early-game class families before generating the pool. This
-    # adds rankless 201xxx rows to Spell.dbc/SkillLineAbility.dbc and emits the
-    # per-level runtime table consumed by CustomSpellScaling.cpp.
+    # Normalize only reviewed standalone early-game class families. Talent proc
+    # effects, talent-granted helpers and duplicate internal roots are excluded
+    # before custom IDs are assigned.
     run(
         sys.executable,
-        str(TOOLS_DIR / "generate_normalized_spells.py"),
+        str(TOOLS_DIR / "generate_reviewed_normalized_spells.py"),
         "--dbc-dir",
         str(dbc_src),
         "--spell-data",
@@ -168,11 +168,11 @@ def main() -> None:
         str(runtime_catalog),
     )
 
-    # Strictly replace selected native roots with their custom 201xxx cards.
-    # This preserves catalog cardinality and prevents native + custom duplicates.
+    # Remove reviewed false roots entirely, then strictly replace every selected
+    # native root with its rankless 201xxx card.
     run(
         sys.executable,
-        str(TOOLS_DIR / "apply_normalized_catalog.py"),
+        str(TOOLS_DIR / "apply_reviewed_normalized_catalog.py"),
         "--catalog",
         str(runtime_catalog),
         "--resolved",
@@ -230,7 +230,8 @@ def main() -> None:
     print()
     print("Preparacion completa.")
     print("SpellDraft real catalog generated from live DBCs.")
-    print("Early-game native spell families replaced by normalized 201xxx cards.")
+    print("Reviewed early-game native spell families replaced by normalized 201xxx cards.")
+    print("Reviewed talent/internal false roots removed from the draft catalog.")
     print("No se inicio MySQL, authserver ni worldserver.")
     print("No fue necesario recompilar el core para preparar los datos/cliente.")
 
