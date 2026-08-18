@@ -41,6 +41,13 @@ for _, entry in ipairs(SPELL_POOL) do
     POOL_BY_ID[entry.id] = entry
 end
 
+-- ALE database Execute calls are queued. Keep authoritative per-session caches
+-- so a fast click cannot race the async INSERT/REPLACE before the next offer is
+-- generated. The character DB remains the persistent source across logins.
+local draftedCache = {}
+local pendingOfferCache = {}
+local pendingOfferLoaded = {}
+
 math.randomseed(os.time())
 math.random()
 math.random()
@@ -58,37 +65,44 @@ local function ExpectedDrafts(player)
     return STARTING_DRAFTS + math.max(0, (player:GetLevel() or 1) - 1)
 end
 
-local function CountDrafted(guid)
-    local query = CharDBQuery(
-        "SELECT COUNT(*) FROM spelldraft_drafted_spells WHERE player_guid = " .. guid
-    )
-    if not query then
-        return 0
-    end
-    return query:GetUInt32(0)
-end
-
-local function LoadDraftedSet(guid)
-    local drafted = {}
-    local query = CharDBQuery(
-        "SELECT spell_id FROM spelldraft_drafted_spells WHERE player_guid = " .. guid
-    )
-    if not query then
-        return drafted
+local function LoadDraftedState(guid, force)
+    if draftedCache[guid] and not force then
+        return draftedCache[guid]
     end
 
-    repeat
-        drafted[query:GetUInt32(0)] = true
-    until not query:NextRow()
+    local state = { set = {}, count = 0 }
+    local query = CharDBQuery(
+        "SELECT spell_id FROM spelldraft_drafted_spells " ..
+        "WHERE player_guid = " .. guid .. " ORDER BY draft_index"
+    )
 
-    return drafted
+    if query then
+        repeat
+            local spellId = query:GetUInt32(0)
+            if spellId > 0 and not state.set[spellId] then
+                state.set[spellId] = true
+                state.count = state.count + 1
+            end
+        until not query:NextRow()
+    end
+
+    draftedCache[guid] = state
+    return state
 end
 
 local function DraftsRemaining(player)
-    return math.max(0, ExpectedDrafts(player) - CountDrafted(player:GetGUIDLow()))
+    local state = LoadDraftedState(player:GetGUIDLow(), false)
+    return math.max(0, ExpectedDrafts(player) - state.count)
 end
 
-local function LoadPendingOffer(guid)
+local function LoadPendingOffer(guid, force)
+    if pendingOfferLoaded[guid] and not force then
+        return pendingOfferCache[guid]
+    end
+
+    pendingOfferLoaded[guid] = true
+    pendingOfferCache[guid] = nil
+
     local query = CharDBQuery(
         "SELECT offer_1, offer_2, offer_3 FROM spelldraft_pending_offer " ..
         "WHERE player_guid = " .. guid
@@ -105,10 +119,10 @@ local function LoadPendingOffer(guid)
         end
     end
 
-    if #offer == 0 then
-        return nil
+    if #offer > 0 then
+        pendingOfferCache[guid] = offer
     end
-    return offer
+    return pendingOfferCache[guid]
 end
 
 local function SavePendingOffer(player, offer)
@@ -117,6 +131,9 @@ local function SavePendingOffer(player, offer)
     local two = offer[2] or 0
     local three = offer[3] or 0
     local level = player:GetLevel() or 1
+
+    pendingOfferLoaded[guid] = true
+    pendingOfferCache[guid] = offer
 
     CharDBExecute(string.format(
         "REPLACE INTO spelldraft_pending_offer " ..
@@ -127,20 +144,21 @@ local function SavePendingOffer(player, offer)
 end
 
 local function ClearPendingOffer(guid)
+    pendingOfferLoaded[guid] = true
+    pendingOfferCache[guid] = nil
     CharDBExecute(
         "DELETE FROM spelldraft_pending_offer WHERE player_guid = " .. guid
     )
 end
 
 local function GenerateOffer(player)
-    local guid = player:GetGUIDLow()
-    local drafted = LoadDraftedSet(guid)
+    local state = LoadDraftedState(player:GetGUIDLow(), false)
     local level = player:GetLevel() or 1
     local candidates = {}
 
     for _, entry in ipairs(SPELL_POOL) do
         if entry.minLevel <= level
-            and not drafted[entry.id]
+            and not state.set[entry.id]
             and not player:HasSpell(entry.id) then
             table.insert(candidates, entry.id)
         end
@@ -201,7 +219,7 @@ local function EnsureAndSendOffer(player)
     end
 
     local guid = player:GetGUIDLow()
-    local offer = LoadPendingOffer(guid)
+    local offer = LoadPendingOffer(guid, false)
     if not offer then
         offer = GenerateOffer(player)
         if #offer == 0 then
@@ -234,21 +252,12 @@ local function RestoreDraftedSpells(player)
         return
     end
 
-    local guid = player:GetGUIDLow()
-    local query = CharDBQuery(
-        "SELECT spell_id FROM spelldraft_drafted_spells " ..
-        "WHERE player_guid = " .. guid .. " ORDER BY draft_index"
-    )
-    if not query then
-        return
-    end
-
-    repeat
-        local spellId = query:GetUInt32(0)
-        if spellId > 0 and not player:HasSpell(spellId) then
+    local state = LoadDraftedState(player:GetGUIDLow(), false)
+    for spellId, _ in pairs(state.set) do
+        if not player:HasSpell(spellId) then
             player:LearnSpell(spellId)
         end
-    until not query:NextRow()
+    end
 end
 
 local function AcceptPick(player, spellId)
@@ -257,9 +266,16 @@ local function AcceptPick(player, spellId)
     end
 
     local guid = player:GetGUIDLow()
-    local offer = LoadPendingOffer(guid)
+    local offer = LoadPendingOffer(guid, false)
     if not OfferContains(offer, spellId) then
         player:SendBroadcastMessage("SpellDraft: esa carta no pertenece a tu oferta actual.")
+        EnsureAndSendOffer(player)
+        return
+    end
+
+    local state = LoadDraftedState(guid, false)
+    if state.set[spellId] then
+        ClearPendingOffer(guid)
         EnsureAndSendOffer(player)
         return
     end
@@ -270,8 +286,14 @@ local function AcceptPick(player, spellId)
         return
     end
 
-    local draftIndex = CountDrafted(guid) + 1
+    local draftIndex = state.count + 1
     local level = player:GetLevel() or 1
+
+    -- Update the session state before queueing the database write. This makes
+    -- the next generated offer deterministic even if the DB worker has not yet
+    -- flushed the INSERT.
+    state.set[spellId] = true
+    state.count = draftIndex
 
     CharDBExecute(string.format(
         "INSERT IGNORE INTO spelldraft_drafted_spells " ..
@@ -296,8 +318,14 @@ local function AcceptPick(player, spellId)
     end
 end
 
-local function OnProtocolWhisper(_, player, msg, _, _, _)
+local function OnProtocolWhisper(_, player, msg, _, _, receiver)
     if not IsAdventurer(player) or not msg then
+        return
+    end
+
+    -- The compatibility protocol is deliberately a self-whisper. Do not let a
+    -- player trigger their draft by whispering SC:* commands to somebody else.
+    if receiver and receiver:GetGUIDLow() ~= player:GetGUIDLow() then
         return
     end
 
@@ -334,7 +362,22 @@ local function OnLogin(_, player)
     if not IsAdventurer(player) then
         return
     end
+
+    local guid = player:GetGUIDLow()
+    LoadDraftedState(guid, true)
+    LoadPendingOffer(guid, true)
     RestoreDraftedSpells(player)
+end
+
+local function OnLogout(_, player)
+    if not player then
+        return
+    end
+
+    local guid = player:GetGUIDLow()
+    draftedCache[guid] = nil
+    pendingOfferCache[guid] = nil
+    pendingOfferLoaded[guid] = nil
 end
 
 local function OnLevelChanged(_, player)
@@ -353,6 +396,7 @@ end
 
 RegisterPlayerEvent(19, OnProtocolWhisper) -- PLAYER_EVENT_ON_WHISPER
 RegisterPlayerEvent(3, OnLogin)            -- PLAYER_EVENT_ON_LOGIN
+RegisterPlayerEvent(4, OnLogout)           -- PLAYER_EVENT_ON_LOGOUT
 RegisterPlayerEvent(13, OnLevelChanged)    -- PLAYER_EVENT_ON_LEVEL_CHANGE
 
 print("[Aventureros de Azeroth] Minimal SpellDraft offer/pick engine loaded.")
