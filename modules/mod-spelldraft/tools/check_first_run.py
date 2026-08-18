@@ -80,6 +80,52 @@ def candidate_data_dirs(install: Path, configured: str | None) -> list[Path]:
     return unique
 
 
+def patch_mpqs(directory: Path, prefix: str = "patch-") -> list[str]:
+    if not directory.is_dir():
+        return []
+    prefix = prefix.lower()
+    return sorted(
+        entry.name
+        for entry in directory.iterdir()
+        if entry.is_file()
+        and entry.suffix.lower() == ".mpq"
+        and entry.name.lower().startswith(prefix)
+    )
+
+
+def print_client_patch_inventory(client: Path, locale: str) -> None:
+    root_dir = client / "Data"
+    locale_dir = root_dir / locale
+    root_patches = patch_mpqs(root_dir)
+    locale_patches = patch_mpqs(locale_dir, f"patch-{locale}-")
+
+    print("  MPQ existentes (solo lectura):")
+    print(f"    root: {len(root_patches)}")
+    for name in root_patches:
+        print(f"      Data/{name}")
+    print(f"    {locale}: {len(locale_patches)}")
+    for name in locale_patches:
+        print(f"      Data/{locale}/{name}")
+
+    preferred_root = "patch-Z.mpq"
+    preferred_locale = f"patch-{locale}-z.mpq"
+    occupied_root = preferred_root.lower() in {name.lower() for name in root_patches}
+    occupied_locale = preferred_locale.lower() in {name.lower() for name in locale_patches}
+    if occupied_root or occupied_locale:
+        print(
+            "  [AVISO] Z/z ya esta ocupado. El instalador SpellDraft NO lo pisa; "
+            "elige automaticamente otro par libre."
+        )
+    else:
+        print("  [OK] Z/z esta libre; aun asi el instalador valida colisiones al instalar.")
+
+    owner_manifest = client / ".aventureros-spelldraft.json"
+    print(
+        f"  [{mark(owner_manifest.is_file())}] manifiesto de ownership SpellDraft: "
+        f"{owner_manifest}"
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--install-dir", type=Path, default=DEFAULT_INSTALL)
@@ -87,6 +133,7 @@ def main() -> None:
                         help="Optional clean/extracted DBC source to validate")
     parser.add_argument("--client-dir", type=Path,
                         help="Optional WoW 3.3.5a client directory to validate")
+    parser.add_argument("--locale", default="esES")
     args = parser.parse_args()
 
     install = args.install_dir.expanduser().resolve()
@@ -136,7 +183,7 @@ def main() -> None:
         ranked.append((score, candidate, found))
     ranked.sort(key=lambda item: item[0], reverse=True)
 
-    best_score, best_path, best_found = ranked[0]
+    best_score, best_path, _best_found = ranked[0]
     for score, candidate, found in ranked:
         if score:
             missing = [name for name in REQUIRED_GAME_DATA if name not in found]
@@ -180,6 +227,7 @@ def main() -> None:
         print("CLIENTE")
         print(f"  [{mark(wow.is_file())}] Wow.exe: {wow}")
         print(f"  [{mark((client / 'Data').is_dir())}] Data/: {client / 'Data'}")
+        print_client_patch_inventory(client, args.locale)
         print()
 
     mysql = shutil.which("mysql") or shutil.which("mariadb")
