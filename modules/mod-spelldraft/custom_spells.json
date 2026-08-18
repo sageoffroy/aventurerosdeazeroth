@@ -1,0 +1,63 @@
+{
+  "version": 2,
+  "custom_id_range": [201000, 201999],
+  "runtime_max_level": 80,
+  "selection": {
+    "mode": "current_spelldraft_roots",
+    "max_first_rank_level": 20,
+    "exclude_classes": ["DEATHKNIGHT"],
+    "include_talents": false,
+    "description": "Normalize every currently draftable non-talent class ability whose first rank is learned at level 20 or earlier. The native rank family is kept only as scaling source data and is replaced by one 201xxx card."
+  },
+  "pinned": [
+    {
+      "id": 201000,
+      "clone_from": 100,
+      "label": "Charge without stance restriction",
+      "changes": {
+        "stance_mask": 0,
+        "stance_exclude": 0
+      }
+    },
+    {
+      "id": 201001,
+      "clone_from": 2912,
+      "label": "Starfire normalized"
+    },
+    {
+      "id": 201002,
+      "clone_from": 116,
+      "label": "Frostbolt normalized"
+    },
+    {
+      "id": 201003,
+      "clone_from": 133,
+      "label": "Fireball normalized"
+    },
+    {
+      "id": 201004,
+      "clone_from": 8921,
+      "label": "Moonfire normalized"
+    },
+    {
+      "id": 201005,
+      "clone_from": 585,
+      "label": "Smite normalized"
+    },
+    {
+      "id": 201006,
+      "clone_from": 14914,
+      "label": "Holy Fire normalized"
+    }
+  ],
+  "scaling": {
+    "strategy": "per_effect_rank_anchors",
+    "interpolation": "piecewise_linear",
+    "duplicate_level_rule": "strongest",
+    "below_first_rank": "level_offset_ratio",
+    "low_level_offset": 2.0,
+    "random_range": "runtime_roll",
+    "duration": "rank_step",
+    "notes": "Each varying Spell.dbc effect is normalized independently. Native rank values become anchors; the custom spell has no ranks. Mechanics, targets, visuals, coefficients, costs and non-varying effect values remain inherited from the first native rank."
+  }
+}
