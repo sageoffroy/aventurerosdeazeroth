@@ -22,6 +22,8 @@ REQUIRED_ADVENTURER_DBCS = (
     "CharStartOutfit.dbc",
     "SkillRaceClassInfo.dbc",
 )
+SPELLDRAFT_SUFFIX = "P"
+ADVENTURER_SUFFIX = "Z"
 
 
 def mark(ok: bool) -> str:
@@ -56,9 +58,6 @@ def candidate_data_dirs(install: Path, configured: str | None) -> list[Path]:
         if configured_path.is_absolute():
             candidates.append(configured_path)
         else:
-            # worldserver is normally launched from env/dist/bin. Resolve the
-            # configured relative path there first, but also report common
-            # extraction layouts so the checker remains useful before config.
             candidates.append((bin_dir / configured_path).resolve())
 
     candidates.extend(
@@ -107,22 +106,41 @@ def print_client_patch_inventory(client: Path, locale: str) -> None:
     for name in locale_patches:
         print(f"      Data/{locale}/{name}")
 
-    preferred_root = "patch-Z.mpq"
-    preferred_locale = f"patch-{locale}-z.mpq"
-    occupied_root = preferred_root.lower() in {name.lower() for name in root_patches}
-    occupied_locale = preferred_locale.lower() in {name.lower() for name in locale_patches}
-    if occupied_root or occupied_locale:
+    root_names = {name.lower() for name in root_patches}
+    locale_names = {name.lower() for name in locale_patches}
+
+    reserved = (
+        (
+            "SpellDraft",
+            SPELLDRAFT_SUFFIX,
+            f"patch-{SPELLDRAFT_SUFFIX}.mpq",
+            f"patch-{locale}-{SPELLDRAFT_SUFFIX.lower()}.mpq",
+        ),
+        (
+            "Aventureros/Adventurer",
+            ADVENTURER_SUFFIX,
+            f"patch-{ADVENTURER_SUFFIX}.mpq",
+            f"patch-{locale}-{ADVENTURER_SUFFIX.lower()}.mpq",
+        ),
+    )
+
+    print("  slots reservados del proyecto:")
+    for label, suffix, root_name, locale_name in reserved:
+        occupied = root_name.lower() in root_names or locale_name.lower() in locale_names
+        status = "OCUPADO" if occupied else "LIBRE"
         print(
-            "  [AVISO] Z/z ya esta ocupado. El instalador SpellDraft NO lo pisa; "
-            "elige automaticamente otro par libre."
+            f"    [{status}] {suffix} = {label}: "
+            f"Data/{root_name} + Data/{locale}/{locale_name}"
         )
-    else:
-        print("  [OK] Z/z esta libre; aun asi el instalador valida colisiones al instalar.")
 
     owner_manifest = client / ".aventureros-spelldraft.json"
     print(
         f"  [{mark(owner_manifest.is_file())}] manifiesto de ownership SpellDraft: "
         f"{owner_manifest}"
+    )
+    print(
+        "  Regla: P y Z no se reasignan. Si un archivo ajeno aparece en uno de "
+        "esos slots, el instalador aborta en vez de sobrescribirlo."
     )
 
 
