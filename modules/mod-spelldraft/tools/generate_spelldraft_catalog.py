@@ -2,7 +2,7 @@
 """Generate the runtime SpellDraft ability catalog from the live WotLK DBCs.
 
 The historical SpellDraft client already carries the curated rarity/class
-metadata in Interface/AddOns/SpellDraft/SpellData.lua.  This generator combines
+metadata in Interface/AddOns/SpellDraft/SpellData.lua. This generator combines
 that authored metadata with the server's own Spell/SkillLine/Talent DBCs so the
 new clean draft engine does not need the historical SQL mirror tables.
 
@@ -160,6 +160,20 @@ def parse_spell_data(path: Path) -> dict[int, CuratedSpell]:
     return result
 
 
+def first_localized_string(dbc: DBC, record: bytes, first_field: int) -> str:
+    """Return the first populated string from a 16-locale WotLK string block.
+
+    Extracted client DBCs are locale-dependent. In an esES/esMX extraction the
+    enUS physical slot can legitimately be empty, so catalog eligibility must
+    not assume locale slot zero is populated.
+    """
+    for field in range(first_field, first_field + 16):
+        value = dbc.string(record, field).strip()
+        if value:
+            return value
+    return ""
+
+
 def spell_meta(spell_dbc: DBC) -> dict[int, dict[str, object]]:
     result: dict[int, dict[str, object]] = {}
     for row in spell_dbc.records:
@@ -169,8 +183,8 @@ def spell_meta(spell_dbc: DBC) -> dict[int, dict[str, object]]:
             "attributes": spell_dbc.u32(row, 4),
             "spell_level": spell_dbc.u32(row, 39),
             "icon": spell_dbc.u32(row, 133),
-            "name": spell_dbc.string(row, 136),
-            "description": spell_dbc.string(row, 170),
+            "name": first_localized_string(spell_dbc, row, 136),
+            "description": first_localized_string(spell_dbc, row, 170),
             "family": spell_dbc.u32(row, 208),
         }
     return result
@@ -235,28 +249,59 @@ def build_catalog(
     successor: dict[int, int],
     talents: set[int],
 ) -> list[dict[str, object]]:
-    def static_valid(spell_id: int) -> bool:
+    def rejection_reason(spell_id: int) -> str | None:
         authored = curated.get(spell_id)
         meta = spells.get(spell_id)
-        if not authored or not meta:
-            return False
+        if not authored:
+            return "missing_curated_metadata"
+        if not meta:
+            return "missing_spell_dbc"
         if authored.class_name not in CLASS_SET:
-            return False
+            return "unsupported_class_or_general"
         if authored.rarity < 0 or authored.rarity > 4:
-            return False
-        if spell_id in BLACKLISTED_SPELLS or spell_id in PROTECTED_SPELLS:
-            return False
+            return "rarity_outside_0_4"
+        if spell_id in BLACKLISTED_SPELLS:
+            return "technical_blacklist"
+        if spell_id in PROTECTED_SPELLS:
+            return "protected_system_spell"
         if spell_id in talents:
-            return False
-        if int(meta["attributes"]) & 0x00000040:  # passive
-            return False
+            return "talent_spell"
+        if int(meta["attributes"]) & 0x00000040:
+            return "passive"
         if int(meta["icon"]) <= 1:
-            return False
+            return "missing_icon"
         if not str(meta["description"]).strip():
-            return False
+            return "empty_all_locale_descriptions"
         if not (categories_by_spell.get(spell_id, set()) & RELEVANT_SKILL_CATEGORIES):
-            return False
-        return True
+            return "outside_draft_skill_categories"
+        return None
+
+    def static_valid(spell_id: int) -> bool:
+        return rejection_reason(spell_id) is None
+
+    rejection_counts: Counter[str] = Counter()
+    matched_dbc = 0
+    localized_descriptions = 0
+    relevant_skillline = 0
+    for spell_id in curated:
+        meta = spells.get(spell_id)
+        if meta:
+            matched_dbc += 1
+            if str(meta["description"]).strip():
+                localized_descriptions += 1
+            if categories_by_spell.get(spell_id, set()) & RELEVANT_SKILL_CATEGORIES:
+                relevant_skillline += 1
+        reason = rejection_reason(spell_id)
+        if reason:
+            rejection_counts[reason] += 1
+
+    print("SpellDraft catalog input diagnostics:")
+    print(f"  curated SpellData entries: {len(curated)}")
+    print(f"  IDs present in Spell.dbc: {matched_dbc}")
+    print(f"  IDs with any localized description: {localized_descriptions}")
+    print(f"  IDs in draft skill-line categories: {relevant_skillline}")
+    for reason, count in rejection_counts.most_common():
+        print(f"  rejected {reason}: {count}")
 
     predecessor: dict[int, int] = {}
     for source, target in successor.items():
@@ -312,8 +357,6 @@ def build_catalog(
         if not ranks:
             ranks = [{"id": root, "level": int(root_meta["spell_level"])}]
 
-        # DBC rows occasionally have rank links with equal/zero levels. Keep
-        # deterministic ordering while preserving Blizzard's chain order.
         catalog.append({
             "id": root,
             "rarity": authored.rarity,
