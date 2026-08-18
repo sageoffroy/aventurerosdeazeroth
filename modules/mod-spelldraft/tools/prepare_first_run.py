@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare server DBCs, configs and client MPQs for the first Adventurer run.
+"""Prepare server DBCs, configs, Lua runtime and client MPQs for first run.
 
 This orchestrates only the safe tooling already present in mod-spelldraft. It
 does NOT start MySQL, authserver or worldserver and it does NOT rebuild C++.
@@ -100,6 +100,15 @@ def main() -> None:
         str(install),
         "--data-dir",
         str(data_dir),
+    )
+
+    # The original C++ build already installed ALE. Stage the current Lua tree
+    # directly so Lua-only SpellDraft changes never force a costly C++ rebuild.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "stage_lua_runtime.py"),
+        "--install-dir",
+        str(install),
     )
 
     run(
