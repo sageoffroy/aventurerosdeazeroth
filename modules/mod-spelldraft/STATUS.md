@@ -21,6 +21,8 @@ Estado de la rama `agent/spelldraft-bootstrap` antes de la primera prueba integr
 - [x] instalador del cliente conserva backups y limpia solamente `Cache/WDB`.
 - [x] existe un self-test estático del pipeline.
 - [x] existe CI específica para el self-test y el linter SQL.
+- [x] la capa de recursos classless fue separada del viejo monolito y migrada a `lua/SpellDraft/resources.lua`.
+- [x] los cambios Lua pueden stagedarse al runtime sin recompilar C++.
 
 ## Falta validar localmente / dentro del juego
 
@@ -28,6 +30,8 @@ Estado de la rama `agent/spelldraft-bootstrap` antes de la primera prueba integr
 - [ ] bases `acore_auth`, `acore_characters`, `acore_world` instaladas y accesibles.
 - [ ] updater aplicando el update pendiente de Adventurer.
 - [ ] `worldserver` cargando los DBC modificados de clase 10.
+- [ ] ALE cargando `SpellDraft/resources.lua` sin errores.
+- [ ] Rage visible + pools de Mana/Energy/Runic disponibles para class 10.
 - [ ] cliente 3.3.5a cargando el par de MPQ sin ERROR #132.
 - [ ] una única clase válida por cada raza en creación de personaje.
 - [ ] creación real de un personaje Adventurer ID 10.
@@ -39,12 +43,12 @@ Estado de la rama `agent/spelldraft-bootstrap` antes de la primera prueba integr
 
 ## SpellDraft jugable
 
-El bootstrap actual **todavía no pretende ser la migración completa del motor viejo de cartas**. El sistema histórico fue localizado y estudiado, pero mezcla draft, prestige, tienda, talentos, rerolls, consumibles y Mystic Enchants en archivos grandes.
+La migración completa del motor de cartas todavía no está terminada. El sistema histórico fue localizado y estudiado, pero mezcla draft, prestige, tienda, talentos, rerolls, consumibles y Mystic Enchants en archivos grandes.
 
-La migración nueva debe separar al menos:
+La migración nueva separa las responsabilidades:
 
 1. estado/persistencia del draft;
-2. recursos classless del Adventurer;
+2. **recursos classless del Adventurer — migrado**;
 3. pool y reglas de elegibilidad;
 4. generación de ofertas;
 5. aprendizaje/reemplazo de spells;
@@ -52,4 +56,4 @@ La migración nueva debe separar al menos:
 7. UI del AddOn;
 8. prestige/shop/enchants como sistemas opcionales posteriores.
 
-No se copiará el monolito histórico a ciegas. La primera prueba de mañana valida la plataforma nativa (clase 10 + DBC + SQL + cliente) sobre la que se montará ese motor.
+No se copiará el monolito histórico a ciegas. La primera prueba integrada valida primero la plataforma nativa (clase 10 + recursos + DBC + SQL + cliente) sobre la que se montará el motor de cartas.
