@@ -7,6 +7,15 @@ existing SpellDraft client to render Roman rank suffixes even though no native
 rank is ever learned. Custom SkillLineAbility rows are also normalized to every
 playable race + Adventurer class 10 so native class masks cannot invalidate a
 201xxx spell after learning/relog.
+
+Cast time needs special handling too. WotLK rank families such as Frostbolt and
+Fireball can start with a shorter low-rank cast. Giving a level-60 normalized
+damage curve to that first-rank cast time would inflate DPS. Until the runtime
+has an explicit per-level cast-time hook, each custom spell therefore inherits
+the CastingTimeIndex of the highest native rank at or below the configured
+runtime cap. This is deliberately conservative: low-level casts can be slower,
+but high-level damage can never be paired with an artificially short Rank-1
+cast solely because the custom row was cloned from the family root.
 """
 
 from __future__ import annotations
@@ -14,11 +23,13 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
 from patch_adventurer_class_dbcs import DBCError, read_dbc, set_u32, u32, write_dbc
 
 SPELL_FIELDS = 234
 SPELL_RECORD_SIZE = 936
+CASTING_TIME_INDEX_FIELD = 28
 RANK_FIRST_FIELD = 153
 RANK_LAST_FIELD = 168
 RANK_FLAGS_FIELD = 169
@@ -35,7 +46,7 @@ class FinalizeError(RuntimeError):
     pass
 
 
-def custom_ids(path: Path) -> set[int]:
+def load_resolved(path: Path) -> tuple[int, dict[int, dict[str, Any]]]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -43,47 +54,105 @@ def custom_ids(path: Path) -> set[int]:
     except json.JSONDecodeError as exc:
         raise FinalizeError(f"invalid resolved custom spell registry {path}: {exc}") from exc
 
+    runtime_max_level = int(raw.get("runtime_max_level", 0))
+    if runtime_max_level <= 0:
+        raise FinalizeError(f"{path}: runtime_max_level must be positive")
+
     spells = raw.get("spells")
     if not isinstance(spells, list) or not spells:
         raise FinalizeError(f"{path}: expected a non-empty spells list")
-    result = {
-        int(spell["id"])
-        for spell in spells
-        if isinstance(spell, dict) and "id" in spell
-    }
-    if len(result) != len(spells):
-        raise FinalizeError(f"{path}: duplicate or malformed custom spell IDs")
-    if any(spell_id < 201000 or spell_id > 201999 for spell_id in result):
-        raise FinalizeError(f"{path}: custom spell ID outside 201000-201999")
-    return result
+
+    result: dict[int, dict[str, Any]] = {}
+    for index, spell in enumerate(spells):
+        if not isinstance(spell, dict):
+            raise FinalizeError(f"{path}: spells[{index}] must be an object")
+        try:
+            spell_id = int(spell["id"])
+            native_ranks = spell["native_ranks"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise FinalizeError(f"{path}: malformed spells[{index}]") from exc
+        if spell_id in result:
+            raise FinalizeError(f"{path}: duplicate custom spell ID {spell_id}")
+        if not 201000 <= spell_id <= 201999:
+            raise FinalizeError(f"{path}: custom spell ID outside 201000-201999: {spell_id}")
+        if not isinstance(native_ranks, list) or not native_ranks:
+            raise FinalizeError(f"{path}: custom spell {spell_id} has no native_ranks")
+        result[spell_id] = spell
+
+    return runtime_max_level, result
 
 
-def clear_rank_subtexts(path: Path, ids: set[int]) -> int:
+def strongest_rank_at_cap(spec: dict[str, Any], runtime_max_level: int) -> int:
+    ranks = spec.get("native_ranks")
+    if not isinstance(ranks, list) or not ranks:
+        raise FinalizeError(f"custom spell {spec.get('id')} has no native rank samples")
+
+    usable: list[tuple[int, int]] = []
+    all_ranks: list[tuple[int, int]] = []
+    for rank in ranks:
+        if not isinstance(rank, dict):
+            raise FinalizeError(f"custom spell {spec.get('id')} has malformed native rank data")
+        try:
+            spell_id = int(rank["id"])
+            level = int(rank["level"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise FinalizeError(
+                f"custom spell {spec.get('id')} has malformed native rank data"
+            ) from exc
+        all_ranks.append((level, spell_id))
+        if level <= runtime_max_level:
+            usable.append((level, spell_id))
+
+    selected = usable if usable else all_ranks
+    selected.sort()
+    return selected[-1][1]
+
+
+def finalize_spell_rows(
+    path: Path,
+    runtime_max_level: int,
+    specs: dict[int, dict[str, Any]],
+) -> tuple[int, int]:
     fields, record_size, records, strings, trailing = read_dbc(path)
     if fields != SPELL_FIELDS or record_size != SPELL_RECORD_SIZE:
         raise FinalizeError(
             f"{path}: unexpected Spell.dbc layout {fields} fields / {record_size} bytes"
         )
 
+    by_id = {u32(row, 0): row for row in records}
     found: set[int] = set()
-    changed = 0
-    for row in records:
-        spell_id = u32(row, 0)
-        if spell_id not in ids:
+    rank_text_changed = 0
+    cast_time_changed = 0
+
+    for spell_id, spec in specs.items():
+        row = by_id.get(spell_id)
+        if row is None:
             continue
         found.add(spell_id)
-        row_changed = False
+
+        row_rank_changed = False
         for field in range(RANK_FIRST_FIELD, RANK_LAST_FIELD + 1):
             if u32(row, field) != 0:
                 set_u32(row, field, 0)
-                row_changed = True
+                row_rank_changed = True
         if u32(row, RANK_FLAGS_FIELD) != 0:
             set_u32(row, RANK_FLAGS_FIELD, 0)
-            row_changed = True
-        if row_changed:
-            changed += 1
+            row_rank_changed = True
+        if row_rank_changed:
+            rank_text_changed += 1
 
-    missing = sorted(ids - found)
+        source_rank_id = strongest_rank_at_cap(spec, runtime_max_level)
+        source_rank = by_id.get(source_rank_id)
+        if source_rank is None:
+            raise FinalizeError(
+                f"custom spell {spell_id}: selected native rank {source_rank_id} is missing from Spell.dbc"
+            )
+        desired_cast_time_index = u32(source_rank, CASTING_TIME_INDEX_FIELD)
+        if u32(row, CASTING_TIME_INDEX_FIELD) != desired_cast_time_index:
+            set_u32(row, CASTING_TIME_INDEX_FIELD, desired_cast_time_index)
+            cast_time_changed += 1
+
+    missing = sorted(set(specs) - found)
     if missing:
         raise FinalizeError(
             "resolved custom spell row(s) missing from Spell.dbc: "
@@ -92,19 +161,29 @@ def clear_rank_subtexts(path: Path, ids: set[int]) -> int:
 
     write_dbc(path, fields, record_size, records, strings, trailing)
 
-    # Read it back so client-visible ranklessness is a checked invariant rather
-    # than an assumption made by the generator.
+    # Read back every invariant rather than trusting the mutation above.
     _, _, checked, _, _ = read_dbc(path)
-    for row in checked:
-        spell_id = u32(row, 0)
-        if spell_id not in ids:
-            continue
+    checked_by_id = {u32(row, 0): row for row in checked}
+    for spell_id, spec in specs.items():
+        row = checked_by_id[spell_id]
         if any(
             u32(row, field) != 0
             for field in range(RANK_FIRST_FIELD, RANK_LAST_FIELD + 1)
         ):
             raise FinalizeError(f"custom spell {spell_id} still has localized rank subtext")
-    return changed
+
+        source_rank_id = strongest_rank_at_cap(spec, runtime_max_level)
+        source_rank = checked_by_id.get(source_rank_id)
+        if source_rank is None:
+            raise FinalizeError(
+                f"custom spell {spell_id}: validation source rank {source_rank_id} is missing"
+            )
+        if u32(row, CASTING_TIME_INDEX_FIELD) != u32(source_rank, CASTING_TIME_INDEX_FIELD):
+            raise FinalizeError(
+                f"custom spell {spell_id} does not use the conservative rank-{source_rank_id} cast time"
+            )
+
+    return rank_text_changed, cast_time_changed
 
 
 def normalize_skillline_masks(path: Path, ids: set[int]) -> int:
@@ -166,15 +245,21 @@ def main() -> None:
         raise SystemExit("Missing required DBC(s): " + ", ".join(missing))
 
     try:
-        ids = custom_ids(args.resolved.expanduser().resolve())
-        spell_changed = clear_rank_subtexts(spell_path, ids)
-        ability_changed = normalize_skillline_masks(ability_path, ids)
+        runtime_max_level, specs = load_resolved(args.resolved.expanduser().resolve())
+        rank_changed, cast_time_changed = finalize_spell_rows(
+            spell_path,
+            runtime_max_level,
+            specs,
+        )
+        ability_changed = normalize_skillline_masks(ability_path, set(specs))
     except (DBCError, FinalizeError, KeyError, TypeError, ValueError) as exc:
         raise SystemExit(f"Normalized custom spell DBC finalization aborted: {exc}") from exc
 
-    print(f"Normalized custom spell DBC rows finalized: {len(ids)} spells validated")
-    print(f"  Spell.dbc rank-subtext rows changed: {spell_changed}")
+    print(f"Normalized custom spell DBC rows finalized: {len(specs)} spells validated")
+    print(f"  Spell.dbc rank-subtext rows changed: {rank_changed}")
+    print(f"  Spell.dbc conservative cast-time rows changed: {cast_time_changed}")
     print(f"  SkillLineAbility.dbc class-mask rows changed: {ability_changed}")
+    print(f"  cast-time source: highest native rank at/below level {runtime_max_level}")
     print("  custom associations: every race / Adventurer class 10 only")
 
 
