@@ -31,6 +31,7 @@ from patch_adventurer_class_dbcs import (
 )
 
 MODULE = Path(__file__).resolve().parent.parent
+DEFAULT_LOCALE = "esMX"
 BUNDLED_CHARACTER_CREATE = (
     MODULE / "client-baseline" / "Interface" / "GlueXML" / "CharacterCreate.lua"
 )
@@ -84,9 +85,6 @@ def adventurer_character_create_lua(baseline: bytes) -> bytes:
         )
     text = text.replace(old, new, 1)
 
-    # CharBaseInfo contains exactly one valid class for every playable race.
-    # Resolve that class through Blizzard's own IsRaceClassValid() rather than
-    # depending on localized names or on class ID == enumeration index.
     start = text.find("local function SelectTechnicalClassForCurrentRace()")
     end = text.find("function CharacterCreate_OnLoad(self)", start)
     if start < 0 or end < 0:
@@ -125,8 +123,6 @@ end
 
 """ + text[end:]
 
-    # No stock CharacterCreateClassButton11 exists. Class selection is hidden,
-    # therefore there is no reason to enumerate/render a button per class.
     text = replace_lua_function(
         text,
         "function CharacterCreateEnumerateClasses(...)",
@@ -138,9 +134,6 @@ end
 end""",
     )
 
-    # Update selected-class metadata without touching a non-existent class-11
-    # button. Warrior artwork/flavour remains a safe stock fallback while the
-    # class panel itself is hidden.
     text = replace_lua_function(
         text,
         "function SetCharacterClass(id)",
@@ -167,7 +160,6 @@ end""",
 end""",
     )
 
-    # Reassert the sole valid class immediately before sending character create.
     old_create = """\telse
 \t\tCreateCharacter(CharacterCreateNameEdit:GetText());
 \tend"""
@@ -211,8 +203,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--locale",
-        default="esES",
-        help="Client locale directory, default: esES",
+        default=DEFAULT_LOCALE,
+        help=f"Client locale directory, default: {DEFAULT_LOCALE}",
     )
     parser.add_argument(
         "--server-dbc-dir",
