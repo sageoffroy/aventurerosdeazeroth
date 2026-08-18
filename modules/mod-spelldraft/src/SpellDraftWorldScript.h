@@ -8,12 +8,14 @@ class SpellDraftWorldScript : public WorldScript
 public:
     SpellDraftWorldScript()
         : WorldScript("SpellDraftWorldScript", {
-            WORLDHOOK_ON_AFTER_CONFIG_LOAD
+            WORLDHOOK_ON_AFTER_CONFIG_LOAD,
+            WORLDHOOK_ON_STARTUP
         })
     {
     }
 
     void OnAfterConfigLoad(bool reload) override;
+    void OnStartup() override;
 };
 
 void AddSpellDraftScripts();
