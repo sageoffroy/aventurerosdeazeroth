@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Make native race and starter-spell skill lines valid for Adventurer class 10.
+"""Make native class/race skill lines valid for Adventurer class ID 10.
 
 AzerothCore validates learned spells against SkillRaceClassInfo.dbc while a
-character is loaded. The stock rows do not know about class ID 10, so otherwise
-perfectly valid Adventurer baseline spells can be deleted on login with errors
+character is loaded. A classless Adventurer can draft spells from every stock
+class, so class ID 10 must be valid for the class-bound skill lines behind those
+spells. Otherwise a learned spell can be removed on the next login with errors
 such as Auto Shot -> Marksmanship (163) or Brown Horse -> Mounts (777).
 
 This patch has two deliberately separate responsibilities:
 
-* extend stock race-native language/racial rows to class 10 without broadening
-  their race restrictions;
-* add class-10-only wildcard race mappings for skill lines required by baseline
-  Adventurer spells that are valid for every playable race.
-
-It does not make those skill lines available to any other class.
+* preserve race restrictions for stock language/racial skill lines while
+  extending the correct race/class combinations to class 10;
+* create class-10-only, all-races mappings for every stock skill line that is
+  bound to one or more classes. This authorizes classless spells without
+  granting the skill at character creation and without changing any other
+  class.
 """
 
 from __future__ import annotations
@@ -28,10 +29,10 @@ ADVENTURER_CLASS = 10
 ADVENTURER_CLASS_MASK = 1 << (ADVENTURER_CLASS - 1)  # 512
 PLAYABLE_RACES = (1, 2, 3, 4, 5, 6, 7, 8, 10, 11)
 
-# Skill lines referenced by permanent Adventurer baseline spells. These are not
-# necessarily visible skills we want to grant at creation; SkillRaceClassInfo
-# must merely accept them for class 10 so AzerothCore does not delete the spell.
-ADVENTURER_BASELINE_SPELL_SKILLS = {
+# Permanent baseline spells that exposed the problem first. Validation keeps
+# these explicit sentinels even though the generic classless mapping below now
+# covers every class-bound skill line used by future SpellDraft picks as well.
+BASELINE_SPELL_SKILLS = {
     163,  # Marksmanship: Auto Shot (75)
     762,  # Riding: Apprentice Riding (33388)
     777,  # Mounts: Brown Horse (458)
@@ -50,6 +51,11 @@ RACE_NATIVE_SKILLS: dict[int, tuple[int, ...]] = {
     8: (109, 315, 733),      # Troll: Orcish, Troll, Troll racial
     10: (109, 137, 756),     # Blood Elf: Orcish, Thalassian, Blood Elf racial
     11: (98, 759, 760),      # Draenei: Common, Draenei, Draenei racial
+}
+RACE_NATIVE_SKILL_IDS = {
+    skill
+    for skills in RACE_NATIVE_SKILLS.values()
+    for skill in skills
 }
 
 
@@ -115,7 +121,7 @@ def row_applies_to_adventurer(row: bytearray) -> bool:
     return class_mask == 0 or bool(class_mask & ADVENTURER_CLASS_MASK)
 
 
-def desired_pairs() -> set[tuple[int, int]]:
+def desired_race_pairs() -> set[tuple[int, int]]:
     return {
         (race, skill)
         for race, skills in RACE_NATIVE_SKILLS.items()
@@ -142,8 +148,8 @@ def choose_skill_template(records: list[bytearray], skill: int) -> bytearray:
             f"SkillRaceClassInfo.dbc has no stock template row for required skill {skill}"
         )
 
-    # Prefer the broadest stock class mapping, then the lowest minimum level.
-    # We keep the remaining flags/tier/cost fields from Blizzard's own row.
+    # Prefer Blizzard's broadest class mapping, then its lowest minimum level.
+    # Flags/tier/cost remain copied from the stock row.
     def template_key(row: bytearray) -> tuple[int, int, int]:
         class_mask = u32(row, 3)
         race_mask = u32(row, 2)
@@ -154,19 +160,30 @@ def choose_skill_template(records: list[bytearray], skill: int) -> bytearray:
     return min(candidates, key=template_key)
 
 
-def ensure_baseline_spell_skill_rows(records: list[bytearray]) -> bool:
+def class_bound_skill_ids(records: list[bytearray]) -> set[int]:
+    return {
+        u32(row, 1)
+        for row in records
+        if u32(row, 3) != 0 and u32(row, 1) not in RACE_NATIVE_SKILL_IDS
+    }
+
+
+def ensure_classless_class_skill_rows(records: list[bytearray]) -> bool:
+    """Give class 10 its own all-races mapping for every class-bound skill."""
+
     changed = False
     next_id = max((u32(row, 0) for row in records), default=0) + 1
+    skills = sorted(class_bound_skill_ids(records))
 
-    for skill in sorted(ADVENTURER_BASELINE_SPELL_SKILLS):
+    for skill in skills:
         if covers_all_adventurer_races(records, skill):
             continue
 
-        template = bytearray(choose_skill_template(records, skill))
-        set_u32(template, 0, next_id)
-        set_u32(template, 2, 0)  # raceMask wildcard: every playable race
-        set_u32(template, 3, ADVENTURER_CLASS_MASK)  # class 10 only
-        records.append(template)
+        clone = bytearray(choose_skill_template(records, skill))
+        set_u32(clone, 0, next_id)
+        set_u32(clone, 2, 0)  # raceMask wildcard: every race for Adventurer only
+        set_u32(clone, 3, ADVENTURER_CLASS_MASK)
+        records.append(clone)
         next_id += 1
         changed = True
 
@@ -183,14 +200,14 @@ def patch_skillraceclassinfo(path: Path) -> bool:
             f"{fields} fields / {record_size} bytes"
         )
 
-    wanted = desired_pairs()
+    wanted = desired_race_pairs()
     changed = False
 
+    # Race-native rows are extended only where the stock race mask already
+    # authorizes that race. This keeps Common/Orcish/racial languages correct.
     for row in records:
         skill = u32(row, 1)
         class_mask = u32(row, 3)
-
-        # classMask == 0 is already a wildcard and needs no modification.
         if class_mask == 0:
             continue
 
@@ -206,7 +223,7 @@ def patch_skillraceclassinfo(path: Path) -> bool:
             set_u32(row, 3, new_mask)
             changed = True
 
-    if ensure_baseline_spell_skill_rows(records):
+    if ensure_classless_class_skill_rows(records):
         changed = True
 
     if changed:
@@ -221,7 +238,7 @@ def validate_skillraceclassinfo(path: Path) -> None:
     if fields != 8 or record_size != 32:
         raise DBCError(f"{path}: unexpected SkillRaceClassInfo layout during validation")
 
-    missing: list[tuple[int, int]] = []
+    missing_racial: list[tuple[int, int]] = []
     for race, skills in RACE_NATIVE_SKILLS.items():
         for skill in skills:
             valid = any(
@@ -231,16 +248,28 @@ def validate_skillraceclassinfo(path: Path) -> None:
                 for row in records
             )
             if not valid:
-                missing.append((race, skill))
+                missing_racial.append((race, skill))
 
-    if missing:
+    if missing_racial:
         raise DBCError(
-            f"{path}: Adventurer still lacks native race skill mappings: {missing}"
+            f"{path}: Adventurer still lacks native race skill mappings: "
+            f"{missing_racial}"
+        )
+
+    missing_classless = [
+        skill
+        for skill in sorted(class_bound_skill_ids(records))
+        if not covers_all_adventurer_races(records, skill)
+    ]
+    if missing_classless:
+        raise DBCError(
+            f"{path}: Adventurer still lacks classless skill mappings: "
+            f"{missing_classless}"
         )
 
     missing_baseline = [
         skill
-        for skill in sorted(ADVENTURER_BASELINE_SPELL_SKILLS)
+        for skill in sorted(BASELINE_SPELL_SKILLS)
         if not covers_all_adventurer_races(records, skill)
     ]
     if missing_baseline:
@@ -268,11 +297,12 @@ def main() -> None:
     except DBCError as exc:
         raise SystemExit(f"Adventurer native skill patch aborted: {exc}") from exc
 
-    print("Adventurer native skills validated in SkillRaceClassInfo.dbc:")
+    print("Adventurer native/classless skills validated in SkillRaceClassInfo.dbc:")
     print(f"  status: {'patched' if changed else 'already valid'}")
     print("  faction languages: Common 98 / Orcish 109")
-    print("  racial languages and racial skill lines: valid for class 10")
-    print("  baseline spell skills: 163 Marksmanship, 762 Riding, 777 Mounts")
+    print("  racial languages/racial skill lines: preserve race restrictions")
+    print("  all class-bound skill lines: valid for Adventurer on all playable races")
+    print("  baseline sentinels: 163 Marksmanship, 762 Riding, 777 Mounts")
 
 
 if __name__ == "__main__":
