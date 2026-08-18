@@ -12,6 +12,9 @@ TOOLS_DIR = Path(__file__).resolve().parent
 MODULE = TOOLS_DIR.parent
 REPO = MODULE.parents[1]
 DEFAULT_INSTALL = REPO / "env" / "dist"
+ADVENTURER_WORLD_SQL = (
+    REPO / "data/sql/updates/pending_db_world/rev_1787027400000000000.sql"
+)
 REQUIRED_GAME_DATA = ("dbc", "maps", "vmaps", "mmaps")
 REQUIRED_ADVENTURER_DBCS = (
     "ChrClasses.dbc",
@@ -145,9 +148,8 @@ def main() -> None:
         print("  [FALTA] no encontre dbc/maps/vmaps/mmaps en las rutas habituales")
     print()
 
-    sql = REPO / "data" / "sql" / "custom" / "db_world" / "spelldraft_adventurer_class_10.sql"
     print("SPELLDRAFT / ADVENTURER")
-    print(f"  [{mark(sql.is_file())}] SQL custom: {sql}")
+    print(f"  [{mark(ADVENTURER_WORLD_SQL.is_file())}] SQL pending: {ADVENTURER_WORLD_SQL}")
     baseline = MODULE / "client-baseline" / "Interface" / "GlueXML" / "CharacterCreate.lua"
     print(f"  [{mark(baseline.is_file())}] GlueXML baseline: {baseline}")
     for script in (
@@ -155,6 +157,8 @@ def main() -> None:
         "install_adventurer_client_patch.py",
         "patch_adventurer_class_dbcs.py",
         "mpq_writer.py",
+        "prepare_first_run.py",
+        "validate_repo_assets.py",
     ):
         path = TOOLS_DIR / script
         print(f"  [{mark(path.is_file())}] {script}")
