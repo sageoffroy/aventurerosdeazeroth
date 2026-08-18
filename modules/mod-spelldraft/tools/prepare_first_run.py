@@ -127,9 +127,11 @@ def main() -> None:
         str(install),
     )
 
-    # Normalize only reviewed standalone early-game class families. Talent proc
-    # effects, talent-granted helpers and duplicate internal roots are excluded
-    # before custom IDs are assigned.
+    # Normalize only reviewed standalone early-game class families. The reviewed
+    # wrapper delegates the actual DBC/scaling generation to
+    # generate_normalized_spells.py after filtering known false roots. Talent
+    # proc effects, talent-granted helpers and duplicate internal roots are
+    # excluded before custom IDs are assigned.
     run(
         sys.executable,
         str(TOOLS_DIR / "generate_reviewed_normalized_spells.py"),
@@ -169,7 +171,8 @@ def main() -> None:
     )
 
     # Remove reviewed false roots entirely, then strictly replace every selected
-    # native root with its rankless 201xxx card.
+    # native root with its rankless 201xxx card. The reviewed wrapper delegates
+    # strict one-for-one replacement to apply_normalized_catalog.py.
     run(
         sys.executable,
         str(TOOLS_DIR / "apply_reviewed_normalized_catalog.py"),
