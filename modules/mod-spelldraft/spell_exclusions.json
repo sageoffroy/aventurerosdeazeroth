@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "description": "Reviewed native spell roots that look class-like in DBC/SpellData but are not standalone player spellbook abilities for the normalized SpellDraft pool.",
+  "spells": [
+    { "id": 16979, "reason": "Feral Charge - Bear is granted by the Feral Charge talent, not a baseline <=20 class spell." },
+    { "id": 34501, "reason": "Expose Weakness is the triggered buff/effect of the hunter talent." },
+    { "id": 35098, "reason": "Rapid Killing is the triggered buff/effect of the hunter talent." },
+    { "id": 31643, "reason": "Blazing Speed is the triggered proc effect of the mage talent and is not a spellbook cast." },
+    { "id": 12536, "reason": "Clearcasting is the triggered proc state, not the Arcane Concentration talent/spellbook cast." },
+    { "id": 12494, "reason": "Frostbite is the triggered root effect of the mage talent." },
+    { "id": 53659, "reason": "Sacred Cleansing is the triggered resistance buff from the paladin talent." },
+    { "id": 20050, "reason": "Vengeance is a triggered talent buff/effect, not a standalone paladin spell." },
+    { "id": 20052, "reason": "Vengeance is a triggered talent buff/effect, not a standalone paladin spell." },
+    { "id": 20053, "reason": "Vengeance is a triggered talent buff/effect, not a standalone paladin spell." },
+    { "id": 20154, "reason": "Duplicate/internal Seal of Righteousness variant; AzerothCore player creation uses canonical player spell 21084." },
+    { "id": 33151, "reason": "Surge of Light is the triggered proc state of the priest talent." },
+    { "id": 43339, "reason": "Focused is a triggered shaman proc state, not a standalone class spellbook ability." },
+    { "id": 34936, "reason": "Backlash is the triggered proc state of the warlock talent." },
+    { "id": 59671, "reason": "Challenging Howl is a Metamorphosis-only granted ability, not a baseline <=20 warlock spell." },
+    { "id": 20647, "reason": "Execute helper/effect row reports level 1; the actual warrior Execute ability begins above this <=20 cohort." }
+  ]
+}
