@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 namespace
@@ -25,6 +26,7 @@ struct EffectRange
 
 struct LevelRule
 {
+    bool present = false;
     int32 durationMs = 0;
     std::array<EffectRange, 3> effects{};
 };
@@ -56,7 +58,10 @@ std::string ScalingFilePath()
     return dataDir + "spelldraft/custom_spell_scaling.tsv";
 }
 
-bool ParseEffectRange(std::string const& minimumToken, std::string const& maximumToken, EffectRange& result)
+bool ParseEffectRange(
+    std::string const& minimumToken,
+    std::string const& maximumToken,
+    EffectRange& result)
 {
     if (minimumToken == "x" && maximumToken == "x")
         return true;
@@ -79,7 +84,11 @@ bool LoadScalingFile(std::string const& path)
     std::ifstream input(path);
     if (!input.is_open())
     {
-        LOG_ERROR("module.SpellDraft", "Aventureros de Azeroth: normalized spell scaling file is missing: {}", path);
+        LOG_ERROR(
+            "module.SpellDraft",
+            "Aventureros de Azeroth: normalized spell scaling file is missing: {}",
+            path
+        );
         return false;
     }
 
@@ -139,6 +148,7 @@ bool LoadScalingFile(std::string const& path)
             }
 
             LevelRule rule;
+            rule.present = true;
             rule.durationMs = durationMs;
             for (uint8 effectIndex = 0; effectIndex < 3; ++effectIndex)
             {
@@ -160,10 +170,7 @@ bool LoadScalingFile(std::string const& path)
             SpellLevels& levels = loaded[spellId];
             if (levels.size() <= level)
                 levels.resize(level + 1);
-            if (levels[level].durationMs != 0
-                || levels[level].effects[0].active
-                || levels[level].effects[1].active
-                || levels[level].effects[2].active)
+            if (levels[level].present)
             {
                 LOG_ERROR(
                     "module.SpellDraft",
@@ -192,7 +199,11 @@ bool LoadScalingFile(std::string const& path)
 
     if (loaded.empty())
     {
-        LOG_ERROR("module.SpellDraft", "Aventureros de Azeroth: normalized spell scaling file is empty: {}", path);
+        LOG_ERROR(
+            "module.SpellDraft",
+            "Aventureros de Azeroth: normalized spell scaling file is empty: {}",
+            path
+        );
         return false;
     }
 
@@ -211,12 +222,7 @@ bool LoadScalingFile(std::string const& path)
 
         for (uint32 level = 1; level < levels.size(); ++level)
         {
-            LevelRule const& rule = levels[level];
-            bool const hasRule = rule.durationMs != 0
-                || rule.effects[0].active
-                || rule.effects[1].active
-                || rule.effects[2].active;
-            if (!hasRule)
+            if (!levels[level].present)
             {
                 LOG_ERROR(
                     "module.SpellDraft",
@@ -268,6 +274,9 @@ public:
             level = 1;
 
         LevelRule const& rule = levels[level];
+        if (!rule.present)
+            return;
+
         for (uint8 effectIndex = 0; effectIndex < 3; ++effectIndex)
         {
             EffectRange const& range = rule.effects[effectIndex];
@@ -293,7 +302,10 @@ void ConfigureCustomSpellScaling(bool enabled)
 
     if (!enabled)
     {
-        LOG_INFO("module.SpellDraft", "Aventureros de Azeroth: normalized custom spell scaling disabled.");
+        LOG_INFO(
+            "module.SpellDraft",
+            "Aventureros de Azeroth: normalized custom spell scaling disabled."
+        );
         return;
     }
 
