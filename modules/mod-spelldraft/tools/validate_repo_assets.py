@@ -17,6 +17,7 @@ ADVENTURER_WORLD_SQL = (
 SPELLDRAFT_CHARACTER_SQL = (
     REPO / "data/sql/updates/pending_db_characters/rev_1787076000000000000.sql"
 )
+SPELL_RANKS_SQL = REPO / "data/sql/base/db_world/spell_ranks.sql"
 sys.path.insert(0, str(TOOLS))
 
 
@@ -125,6 +126,12 @@ def validate_sql() -> None:
     require("CREATE TABLE IF NOT EXISTS `spelldraft_pending_offer`" in character_sql,
             "character SQL persists the pending offer")
 
+    ranks_sql = read(SPELL_RANKS_SQL)
+    require("CREATE TABLE `spell_ranks`" in ranks_sql,
+            "AzerothCore canonical spell_ranks table is available")
+    require("`first_spell_id`" in ranks_sql and "`rank`" in ranks_sql,
+            "canonical rank source exposes root and rank columns")
+
     require(not (MODULE / "sql/adventurer_class_10.sql").exists(),
             "there is no duplicate active module SQL copy")
     require(
@@ -142,17 +149,23 @@ def validate_real_catalog_pipeline() -> None:
         '"SkillLineAbility.dbc"': "catalog reads SkillLineAbility.dbc",
         '"Talent.dbc"': "catalog reads Talent.dbc",
         "SPELLDATA_RE": "historical authored rarity/class metadata is parsed",
+        "DEFAULT_SPELL_RANKS_SQL": "catalog reads AzerothCore canonical spell ranks",
+        "parse_spell_ranks": "canonical rank SQL is parsed into families",
+        'return "nonfirst_rank"': "non-first ranks cannot become draft cards",
+        "ranks_by_root": "higher ranks are attached to their root card",
         "RELEVANT_SKILL_CATEGORIES = {6, 7, 8, 9, 11}": "historical draft skill-line scope is preserved",
         "BLACKLISTED_SPELLS": "technical trigger blacklist is preserved",
         "PROTECTED_SPELLS": "system/profession/riding spells are protected",
         "0x00000040": "passive spells are excluded",
-        "successor": "DBC superseded-spell links build rank chains",
         "SpellDraftRarityDistribution": "generated catalog exports rarity distribution",
         "[0] = 70.0": "common rarity target is 70 percent",
         "[4] = 0.5": "legendary rarity target is 0.5 percent",
     }
     for token, label in expectations.items():
         require(token in generator, label)
+
+    require("SupercededBySpell" not in generator,
+            "catalog does not infer rank families from SkillLineAbility supersede links")
 
     prepare = read(TOOLS / "prepare_first_run.py")
     require("generate_spelldraft_catalog.py" in prepare,
