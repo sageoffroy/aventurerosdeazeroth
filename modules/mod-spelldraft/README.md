@@ -12,7 +12,7 @@ La primera base nativa ya existe y compila:
 - Adventurer disponible como base para todas las razas jugables.
 - baseline de armas, armaduras, raciales, idiomas, equitación y acciones universales.
 - parcheador DBC único para servidor y cliente.
-- SQL re-aplicable registrado en `data/sql/custom/db_world/`.
+- SQL de Adventurer registrado como update pendiente normal de AzerothCore.
 - generador seguro del par de MPQ del cliente.
 
 El sistema de cartas/draft todavía se desarrollará encima de esta base.
@@ -51,13 +51,13 @@ modules/mod-spelldraft/
 └── tools/            builders, instaladores y validadores
 ```
 
-La **única fuente SQL activa** de Adventurer es:
+La **única fuente SQL activa** de Adventurer en esta rama es:
 
 ```text
-data/sql/custom/db_world/spelldraft_adventurer_class_10.sql
+data/sql/updates/pending_db_world/rev_1787027400000000000.sql
 ```
 
-AzerothCore incluye `$/data/sql/custom/db_world` como fuente `CUSTOM` en `updates_include`, por lo que no mantenemos una segunda copia SQL dentro del módulo.
+La ubicación sigue las reglas normales del updater de AzerothCore; no mantenemos una segunda copia activa dentro del módulo ni en `data/sql/custom`.
 
 ## Pipeline DBC y cliente
 
