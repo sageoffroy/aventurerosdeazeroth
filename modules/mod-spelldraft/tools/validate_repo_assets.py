@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Static/self-contained validation for SpellDraft bootstrap assets."""
+"""Static/self-contained validation for SpellDraft assets."""
 
 from __future__ import annotations
 
@@ -133,12 +133,48 @@ def validate_sql() -> None:
     )
 
 
+def validate_real_catalog_pipeline() -> None:
+    print("\nSPELLDRAFT REAL CATALOG")
+    generator = read(TOOLS / "generate_spelldraft_catalog.py")
+    expectations = {
+        '"Spell.dbc"': "catalog reads Spell.dbc",
+        '"SkillLine.dbc"': "catalog reads SkillLine.dbc",
+        '"SkillLineAbility.dbc"': "catalog reads SkillLineAbility.dbc",
+        '"Talent.dbc"': "catalog reads Talent.dbc",
+        "SPELLDATA_RE": "historical authored rarity/class metadata is parsed",
+        "RELEVANT_SKILL_CATEGORIES = {6, 7, 8, 9, 11}": "historical draft skill-line scope is preserved",
+        "BLACKLISTED_SPELLS": "technical trigger blacklist is preserved",
+        "PROTECTED_SPELLS": "system/profession/riding spells are protected",
+        "0x00000040": "passive spells are excluded",
+        "successor": "DBC superseded-spell links build rank chains",
+        "SpellDraftRarityDistribution": "generated catalog exports rarity distribution",
+        "[0] = 70.0": "common rarity target is 70 percent",
+        "[4] = 0.5": "legendary rarity target is 0.5 percent",
+    }
+    for token, label in expectations.items():
+        require(token in generator, label)
+
+    prepare = read(TOOLS / "prepare_first_run.py")
+    require("generate_spelldraft_catalog.py" in prepare,
+            "first-run pipeline generates the real runtime catalog")
+    require('"SpellData.lua"' in prepare,
+            "first-run pipeline uses the installed historical SpellData metadata")
+    for dbc in ("Spell.dbc", "SkillLine.dbc", "SkillLineAbility.dbc", "Talent.dbc"):
+        require(f'"{dbc}"' in prepare, f"first-run requires {dbc}")
+
+
 def validate_draft_engine() -> None:
-    print("\nSPELLDRAFT MINIMAL ENGINE")
+    print("\nSPELLDRAFT REAL ENGINE")
     draft = read(MODULE / "lua/SpellDraft/draft.lua")
     expectations = {
         "local CLASS_ADVENTURER = 10": "draft engine is class-10-only",
-        "local STARTING_DRAFTS = 5": "first character receives five bootstrap drafts",
+        "local DRAFTS_PER_LEVEL = 10": "Adventurer receives ten drafts per level",
+        "local LOW_LEVEL_POOL_FLOOR = 20": "level 1 uses the historical level-20 pool floor",
+        'dofile(parentPath .. "catalog.lua")': "runtime loads the generated real catalog",
+        "RollRarity": "offers use rarity-weighted selection",
+        "RARITY_DISTRIBUTION": "runtime consumes generated rarity weights",
+        "PlayerHasAnyRank": "known rank families are not redrafted",
+        "RestoreAndUpgradeDraftedSpells": "drafted rank families upgrade as the player levels",
         'msg == "SC_CHECK"': "historical addon SC_CHECK protocol is supported",
         'msg:match("^SC:(%d+)$")': "historical addon card-pick protocol is supported",
         'player:SendAddonMessage("SpellChoice"': "server sends card offers to the existing addon",
@@ -152,14 +188,16 @@ def validate_draft_engine() -> None:
     for token, label in expectations.items():
         require(token in draft, label)
 
+    require("local SPELL_POOL = {" not in draft,
+            "hardcoded bootstrap spell pool has been removed")
     require("prestige_stats" not in draft,
-            "minimal draft engine is independent from historical prestige_stats")
+            "real draft engine remains independent from historical prestige_stats")
     require("FROM drafted_spells " not in draft and "INTO drafted_spells " not in draft,
-            "minimal draft engine does not depend on historical drafted_spells")
+            "real draft engine does not depend on historical drafted_spells")
 
     stage = read(TOOLS / "stage_lua_runtime.py")
     require('source.rglob("*.lua")' in stage,
-            "runtime staging includes the new draft.lua automatically")
+            "runtime staging includes draft.lua automatically")
 
 
 def validate_client_pipeline() -> None:
@@ -202,9 +240,10 @@ def main() -> None:
     validate_core()
     validate_adventurer_baseline()
     validate_sql()
+    validate_real_catalog_pipeline()
     validate_draft_engine()
     validate_client_pipeline()
-    print("\nALL SPELLDRAFT BOOTSTRAP CHECKS PASSED")
+    print("\nALL SPELLDRAFT CHECKS PASSED")
 
 
 if __name__ == "__main__":
