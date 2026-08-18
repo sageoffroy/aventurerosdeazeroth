@@ -7,6 +7,8 @@ import argparse
 import shutil
 from pathlib import Path
 
+from patch_spelldraft_protocol import ProtocolPatchError, patch_server_runtime
+
 TOOLS = Path(__file__).resolve().parent
 MODULE = TOOLS.parent
 REPO = MODULE.parents[1]
@@ -36,6 +38,16 @@ def main() -> None:
         copied += 1
         print(f"STAGE: {relative}")
 
+    runtime_draft = destination / "SpellDraft" / "draft.lua"
+    try:
+        protocol_changed = patch_server_runtime(runtime_draft)
+    except ProtocolPatchError as exc:
+        raise SystemExit(f"SpellDraft runtime protocol patch aborted: {exc}") from exc
+
+    print(
+        "STAGE: SpellDraft protocol CHAT bridge "
+        + ("patched" if protocol_changed else "already valid")
+    )
     print(f"SpellDraft Lua runtime staged: {copied} file(s) -> {destination}")
 
 
