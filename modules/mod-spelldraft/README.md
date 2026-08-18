@@ -43,24 +43,27 @@ Ver `ADVENTURER.md` para la definición funcional.
 
 ```text
 modules/mod-spelldraft/
-├── src/        integración nativa C++
-├── lua/        lógica dinámica mediante ALE
-├── conf/       configuración
-├── sql/        SQL canónico del módulo
-└── tools/      builders y validadores de DBC/cliente
+├── src/              integración nativa C++
+├── lua/              lógica dinámica mediante ALE
+├── conf/             configuración
+├── client-baseline/  baseline GlueXML congelado
+├── sql/              documentación de la ubicación SQL activa
+└── tools/            builders, instaladores y validadores
 ```
 
-El SQL que debe descubrir AzerothCore en runtime también vive, en forma re-aplicable, en:
+La **única fuente SQL activa** de Adventurer es:
 
 ```text
 data/sql/custom/db_world/spelldraft_adventurer_class_10.sql
 ```
 
+AzerothCore incluye `$/data/sql/custom/db_world` como fuente `CUSTOM` en `updates_include`, por lo que no mantenemos una segunda copia SQL dentro del módulo.
+
 ## Pipeline DBC y cliente
 
 Una sola transformación (`patch_adventurer_class_dbcs.py`) define los DBC de clase 10 para servidor y cliente. No se editan DBC binarios a mano.
 
-El builder de cliente produce dos archivos deliberadamente distintos:
+El builder de cliente es autosuficiente: usa el baseline versionado en `client-baseline/` y produce dos archivos deliberadamente distintos:
 
 ```text
 Data/patch-Z.mpq
@@ -69,12 +72,23 @@ Data/esES/patch-esES-z.mpq
 
 El primero contiene GlueXML; el segundo contiene los DBC Adventurer. Esta separación evita el layout duplicado que daba problemas al cliente 3.3.5a.
 
+## Primera ejecución
+
+Antes de arrancar el servidor puede correrse, sin modificar nada:
+
+```bash
+python3 modules/mod-spelldraft/tools/check_first_run.py
+```
+
+La secuencia completa está documentada en `FIRST_RUN.md`.
+
 ## Principios
 
 1. Un solo sistema SpellDraft.
 2. Un solo pipeline DBC para servidor y cliente.
-3. No editar binarios DBC a mano.
-4. No usar un `install.sh` que parchee silenciosamente el core.
-5. Los cambios al core quedan versionados explícitamente.
-6. `main` permanece estable.
-7. El desarrollo continúa en ramas `agent/*` hasta ser probado.
+3. Una sola fuente SQL activa.
+4. No editar binarios DBC a mano.
+5. No usar un `install.sh` que parchee silenciosamente el core.
+6. Los cambios al core quedan versionados explícitamente.
+7. `main` permanece estable.
+8. El desarrollo continúa en ramas `agent/*` hasta ser probado.
