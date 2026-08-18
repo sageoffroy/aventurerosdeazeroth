@@ -6,7 +6,7 @@ on:
       - agent/spelldraft-bootstrap
     paths:
       - "modules/mod-spelldraft/**"
-      - "data/sql/custom/db_world/spelldraft_adventurer_class_10.sql"
+      - "data/sql/updates/pending_db_world/**"
       - "src/server/shared/SharedDefines.h"
       - "src/server/shared/enuminfo_SharedDefines.cpp"
       - "src/server/game/Entities/Unit/StatSystem.cpp"
@@ -14,7 +14,7 @@ on:
   pull_request:
     paths:
       - "modules/mod-spelldraft/**"
-      - "data/sql/custom/db_world/spelldraft_adventurer_class_10.sql"
+      - "data/sql/updates/pending_db_world/**"
       - "src/server/shared/SharedDefines.h"
       - "src/server/shared/enuminfo_SharedDefines.cpp"
       - "src/server/game/Entities/Unit/StatSystem.cpp"
@@ -34,3 +34,6 @@ jobs:
 
       - name: Validate SpellDraft bootstrap assets
         run: python3 modules/mod-spelldraft/tools/validate_repo_assets.py
+
+      - name: Lint pending SQL
+        run: python3 apps/codestyle/codestyle-sql.py
