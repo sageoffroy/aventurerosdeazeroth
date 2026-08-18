@@ -24,6 +24,10 @@ REQUIRED_DBCS = (
     "CharBaseInfo.dbc",
     "CharStartOutfit.dbc",
     "SkillRaceClassInfo.dbc",
+    "Spell.dbc",
+    "SkillLine.dbc",
+    "SkillLineAbility.dbc",
+    "Talent.dbc",
 )
 
 
@@ -83,12 +87,23 @@ def main() -> None:
     if not wow.is_file():
         raise SystemExit(f"WoW client not found in {client}")
 
+    spell_data = client / "Interface" / "AddOns" / "SpellDraft" / "SpellData.lua"
+    if not spell_data.is_file():
+        raise SystemExit(
+            "Historical SpellDraft metadata not found in the current client: "
+            f"{spell_data}\n"
+            "The real-pool migration needs SpellData.lua for the curated rarity/class mapping."
+        )
+
+    runtime_catalog = install / "bin" / "lua_scripts" / "SpellDraft" / "catalog.lua"
+
     print("=== Aventureros de Azeroth: preparacion primera ejecucion ===")
     print(f"install:       {install}")
     print(f"server data:   {data_dir}")
     print(f"DBC source:    {dbc_src}")
     print(f"client:        {client}")
     print(f"locale:        {args.locale}")
+    print(f"SpellData:     {spell_data}")
 
     run(sys.executable, str(TOOLS_DIR / "validate_repo_assets.py"))
 
@@ -106,6 +121,20 @@ def main() -> None:
         str(TOOLS_DIR / "stage_lua_runtime.py"),
         "--install-dir",
         str(install),
+    )
+
+    # Build the real draft pool directly from the server DBCs. SpellData.lua is
+    # used only as the authored rarity/class map; spell level, passivity,
+    # skill-line scope, talent exclusion and rank chains come from live DBCs.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "generate_spelldraft_catalog.py"),
+        "--dbc-dir",
+        str(dbc_src),
+        "--spell-data",
+        str(spell_data),
+        "--output",
+        str(runtime_catalog),
     )
 
     # AzerothCore only loads the stock playercreateinfo_skills language/racial
@@ -157,6 +186,7 @@ def main() -> None:
 
     print()
     print("Preparacion completa.")
+    print("SpellDraft real catalog generated from live DBCs.")
     print("No se inicio MySQL, authserver ni worldserver.")
     print("No fue necesario recompilar el core.")
 
