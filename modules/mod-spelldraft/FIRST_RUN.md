@@ -66,16 +66,17 @@ python3 modules/mod-spelldraft/tools/prepare_first_run.py \
 
 Ese comando, en orden:
 
-1. crea los `.conf` que falten sin pisar ninguno existente;
-2. configura `DataDir` a `env/dist/data` solamente si acaba de crear `worldserver.conf`;
-3. genera los DBC de Adventurer;
-4. instala exactamente esos mismos DBC en `env/dist/data/dbc`;
-5. genera `Data/patch-Z.mpq` para GlueXML;
-6. genera `Data/esES/patch-esES-z.mpq` para los DBC del cliente;
-7. hace backup de patches/DBC existentes una sola vez;
-8. instala los MPQ en el cliente;
-9. borra únicamente `Cache/WDB` del cliente;
-10. ejecuta nuevamente el chequeo de primera ejecución.
+1. ejecuta el self-test del proyecto antes de modificar nada;
+2. crea los `.conf` que falten sin pisar ninguno existente;
+3. configura `DataDir` a `env/dist/data` solamente si acaba de crear `worldserver.conf`;
+4. genera los DBC de Adventurer;
+5. instala exactamente esos mismos DBC en `env/dist/data/dbc`;
+6. genera `Data/patch-Z.mpq` para GlueXML;
+7. genera `Data/esES/patch-esES-z.mpq` para los DBC del cliente;
+8. hace backup de patches/DBC existentes una sola vez;
+9. instala los MPQ en el cliente;
+10. borra únicamente `Cache/WDB` del cliente;
+11. ejecuta nuevamente el chequeo de primera ejecución.
 
 No inicia MySQL, `authserver` ni `worldserver`.
 
@@ -112,22 +113,20 @@ Los dos MPQ son deliberadamente distintos: el root contiene GlueXML y el locale 
 
 ## 5. SQL de Adventurer
 
-Hay una sola fuente SQL activa:
+Hay una sola fuente SQL activa en esta rama:
 
 ```text
-data/sql/custom/db_world/spelldraft_adventurer_class_10.sql
+data/sql/updates/pending_db_world/rev_1787027400000000000.sql
 ```
 
-AzerothCore registra `$/data/sql/custom/db_world` como fuente `CUSTOM` en `updates_include`.
-
-La configuración stock actual además usa:
+Es un update pendiente normal de AzerothCore, por lo que `worldserver` lo descubre mediante el updater estándar. La configuración stock actual usa:
 
 ```ini
 Updates.EnableDatabases = 7
 Updates.AutoSetup = 1
 ```
 
-Por lo tanto el `worldserver` puede descubrir el SQL custom durante su actualización normal. Si en la configuración local se deshabilitó el updater, importar ese archivo manualmente en `acore_world`.
+No se mantiene una copia paralela en `data/sql/custom` ni dentro del módulo.
 
 ## 6. Configuración runtime
 
