@@ -13,6 +13,12 @@ use different patch stacks/load orders; keeping the exact same SpellDraft bytes
 in root Z and locale Z prevents custom 201xxx spell rows from disappearing
 behind another locale archive while preserving the existing class-10 patch.
 
+The extracted server Spell.dbc used by this project carries Spanish strings in
+the esES locale slot. The production client is esMX. Before packaging Z we
+therefore mirror missing esES name/rank/description/tooltip offsets into the
+esMX slot. This changes only localized string references; spell mechanics and
+custom IDs remain byte-for-byte otherwise unchanged.
+
 Z is the single official patch family for Adventurer, SpellDraft and custom
 spells. The same DBC payload is copied to the server runtime and client, so
 custom 201xxx spell rows and their SkillLineAbility associations cannot drift.
@@ -33,8 +39,12 @@ from patch_adventurer_class_dbcs import (
     patch_charstartoutfit,
     patch_chrclasses,
     patch_skillraceclassinfo,
+    read_dbc,
+    set_u32,
+    u32,
     validate_charbaseinfo,
     validate_charstartoutfit,
+    write_dbc,
 )
 
 MODULE = Path(__file__).resolve().parent.parent
@@ -60,9 +70,69 @@ SPELLDRAFT_DBC_NAMES = (
 
 DBC_NAMES = CLASS_DBC_NAMES + SPELLDRAFT_DBC_NAMES
 
+SPELL_FIELDS = 234
+SPELL_RECORD_SIZE = 936
+
+# Spell.dbc localized string blocks are 16 locale offsets followed by a flags
+# field. WotLK locale order: enUS, koKR, frFR, deDE, zhCN, zhTW, esES, esMX,
+# ruRU, then unused/reserved slots.
+SPELL_LOCALIZED_BLOCK_STARTS = (
+    136,  # Name
+    153,  # Rank/subtext
+    170,  # Description
+    187,  # ToolTip
+)
+ES_ES_LOCALE_INDEX = 6
+ES_MX_LOCALE_INDEX = 7
+
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def mirror_spell_locale(path: Path, locale: str) -> int:
+    """Populate missing esMX Spell.dbc text offsets from the esES slot.
+
+    The same string-table offset can safely be referenced by both locales. This
+    avoids duplicating the string payload and preserves Blizzard's localized
+    token expressions ($s1, $d, etc.) exactly.
+    """
+    if locale != "esMX":
+        return 0
+
+    fields, record_size, records, strings, trailing = read_dbc(path)
+    if fields != SPELL_FIELDS or record_size != SPELL_RECORD_SIZE:
+        raise SystemExit(
+            f"{path}: unexpected Spell.dbc layout {fields} fields / {record_size} bytes"
+        )
+
+    changed = 0
+    for row in records:
+        for start in SPELL_LOCALIZED_BLOCK_STARTS:
+            source_field = start + ES_ES_LOCALE_INDEX
+            target_field = start + ES_MX_LOCALE_INDEX
+            source_offset = u32(row, source_field)
+            target_offset = u32(row, target_field)
+            if target_offset == 0 and source_offset != 0:
+                set_u32(row, target_field, source_offset)
+                changed += 1
+
+    if changed:
+        write_dbc(path, fields, record_size, records, strings, trailing)
+
+    # Validate the exact failure mode that previously produced blank spell
+    # names/descriptions on the esMX client.
+    _, _, checked, _, _ = read_dbc(path)
+    for row in checked:
+        for start in SPELL_LOCALIZED_BLOCK_STARTS:
+            source_offset = u32(row, start + ES_ES_LOCALE_INDEX)
+            target_offset = u32(row, start + ES_MX_LOCALE_INDEX)
+            if source_offset != 0 and target_offset == 0:
+                raise SystemExit(
+                    f"{path}: esMX localized spell text still missing for spell {u32(row, 0)}"
+                )
+
+    return changed
 
 
 def load_character_create_baseline(explicit: Path | None) -> bytes:
@@ -258,6 +328,7 @@ def main() -> None:
         patch_skillraceclassinfo(work / "SkillRaceClassInfo.dbc")
         validate_charbaseinfo(work / "CharBaseInfo.dbc")
         validate_charstartoutfit(work / "CharStartOutfit.dbc")
+        mirrored_spell_strings = mirror_spell_locale(work / "Spell.dbc", args.locale)
 
         root_files = {
             "Interface\\GlueXML\\CharacterCreate.lua": adventurer_character_create_lua(
@@ -311,6 +382,7 @@ def main() -> None:
         "dbc_source": str(source),
         "dbc_payload": list(DBC_NAMES),
         "root_custom_spell_dbc_payload": list(SPELLDRAFT_DBC_NAMES),
+        "spell_locale_mirrored_offsets": mirrored_spell_strings,
         "character_create_baseline_sha256": hashlib.sha256(baseline).hexdigest(),
     }
     (output / "manifest.json").write_text(
@@ -326,6 +398,8 @@ def main() -> None:
     print(f"  locale: {locale_output}")
     print("  validation: exactly one Adventurer class per playable race")
     print("  custom spell DBCs: Spell.dbc + SkillLineAbility.dbc packaged in root Z + locale Z")
+    if args.locale == "esMX":
+        print(f"  Spell.dbc esES -> esMX localized offsets mirrored: {mirrored_spell_strings}")
     if args.server_dbc_dir:
         print(f"  server DBCs updated: {args.server_dbc_dir.expanduser().resolve()}")
 
