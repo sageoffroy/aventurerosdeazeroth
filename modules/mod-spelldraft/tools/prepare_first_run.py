@@ -3,6 +3,7 @@
 
 This orchestrates only the safe tooling already present in mod-spelldraft. It
 does NOT start MySQL, authserver or worldserver and it does NOT rebuild C++.
+Before changing any local runtime file it runs the repository self-test.
 """
 
 from __future__ import annotations
@@ -87,6 +88,10 @@ def main() -> None:
     print(f"DBC source:    {dbc_src}")
     print(f"client:        {client}")
     print(f"locale:        {args.locale}")
+
+    # Fail before touching configs, DBCs or the client if the checked-in
+    # bootstrap is internally inconsistent.
+    run(sys.executable, str(TOOLS_DIR / "validate_repo_assets.py"))
 
     run(
         sys.executable,
