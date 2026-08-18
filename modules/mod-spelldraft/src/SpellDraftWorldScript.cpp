@@ -4,18 +4,36 @@
 #include "Configuration/Config.h"
 #include "Log.h"
 
+namespace
+{
+bool SpellDraftEnabled()
+{
+    return sConfigMgr->GetOption<bool>("SpellDraft.Enable", true);
+}
+}
+
 void SpellDraftWorldScript::OnAfterConfigLoad(bool reload)
 {
-    bool const enabled =
-        sConfigMgr->GetOption<bool>("SpellDraft.Enable", true);
+    if (!reload)
+        return;
 
+    bool const enabled = SpellDraftEnabled();
     ConfigureCustomSpellScaling(enabled);
-
     LOG_INFO(
         "module.SpellDraft",
-        "Aventureros de Azeroth: SpellDraft bootstrap loaded. Enabled: {}. Reload: {}.",
-        enabled,
-        reload
+        "Aventureros de Azeroth: SpellDraft config reloaded. Enabled: {}.",
+        enabled
+    );
+}
+
+void SpellDraftWorldScript::OnStartup()
+{
+    bool const enabled = SpellDraftEnabled();
+    ConfigureCustomSpellScaling(enabled);
+    LOG_INFO(
+        "module.SpellDraft",
+        "Aventureros de Azeroth: SpellDraft bootstrap loaded. Enabled: {}.",
+        enabled
     );
 }
 
