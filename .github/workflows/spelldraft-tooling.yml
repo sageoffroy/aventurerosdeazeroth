@@ -7,6 +7,7 @@ on:
     paths:
       - "modules/mod-spelldraft/**"
       - "data/sql/updates/pending_db_world/**"
+      - "data/sql/updates/pending_db_characters/**"
       - "src/server/shared/SharedDefines.h"
       - "src/server/shared/enuminfo_SharedDefines.cpp"
       - "src/server/game/Entities/Unit/StatSystem.cpp"
@@ -15,6 +16,7 @@ on:
     paths:
       - "modules/mod-spelldraft/**"
       - "data/sql/updates/pending_db_world/**"
+      - "data/sql/updates/pending_db_characters/**"
       - "src/server/shared/SharedDefines.h"
       - "src/server/shared/enuminfo_SharedDefines.cpp"
       - "src/server/game/Entities/Unit/StatSystem.cpp"
