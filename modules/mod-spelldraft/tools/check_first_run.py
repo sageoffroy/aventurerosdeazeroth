@@ -147,6 +147,9 @@ def resolved_replacements(path: Path) -> tuple[bool, dict[int, int]]:
     except (OSError, json.JSONDecodeError):
         return False, {}
 
+    if int(raw.get("runtime_max_level", 0)) != 60:
+        return False, {}
+
     spells = raw.get("spells")
     if not isinstance(spells, list) or not spells:
         return False, {}
@@ -262,6 +265,7 @@ def main() -> None:
     for script in (
         "apply_normalized_catalog.py",
         "build_adventurer_client_patch.py",
+        "finalize_normalized_spell_dbcs.py",
         "generate_normalized_spells.py",
         "generate_spelldraft_catalog.py",
         "install_adventurer_client_patch.py",
@@ -282,9 +286,14 @@ def main() -> None:
     scaling_ok = scaling_path.is_file() and scaling_path.stat().st_size > 1024
     if scaling_ok:
         scaling_text = scaling_path.read_text(encoding="utf-8", errors="replace")
-        scaling_ok = "201002 1 " in scaling_text and "201002 20 " in scaling_text
+        scaling_ok = (
+            "201002 1 " in scaling_text
+            and "201002 20 " in scaling_text
+            and "201002 60 " in scaling_text
+            and "201002 61 " not in scaling_text
+        )
     print(f"  [{mark(resolved_ok)}] custom spells resueltos: {resolved_path}")
-    print(f"  [{mark(scaling_ok)}] scaling 1-80 runtime: {scaling_path}")
+    print(f"  [{mark(scaling_ok)}] scaling 1-60 runtime: {scaling_path}")
 
     runtime_catalog = bin_dir / "lua_scripts" / "SpellDraft" / "catalog.lua"
     catalog_ok = runtime_catalog.is_file()
