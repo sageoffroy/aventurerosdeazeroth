@@ -227,6 +227,30 @@ void EnsureStarterRidingSkill(Player* player)
     player->SetSkill(SKILL_RIDING, 1, APPRENTICE_RIDING_VALUE, APPRENTICE_RIDING_VALUE);
 }
 
+void SyncAdventurerBaseMana(Player* player)
+{
+    if (!IsAdventurer(player))
+        return;
+
+    // SpellDraft owns a custom maximum-mana pool, but WotLK percentage spell
+    // costs use UNIT_FIELD_BASE_MANA through SpellInfo::CalcPowerCost(). Derive
+    // that field from the live maximum mana with the normal WotLK intellect
+    // contribution instead of leaving class 10 on its small DB BaseMana value.
+    //
+    // ManaFromIntellect = Int                         (Int < 20)
+    // ManaFromIntellect = 20 + 15 * (Int - 20)       (Int >= 20)
+    // BaseMana          = MaxMana - ManaFromIntellect
+    float intellect = float(player->GetStat(STAT_INTELLECT));
+    float baseIntellect = intellect < 20.0f ? intellect : 20.0f;
+    float moreIntellect = intellect - baseIntellect;
+    uint32 manaFromIntellect = uint32(baseIntellect + moreIntellect * 15.0f);
+    uint32 maxMana = player->GetMaxPower(POWER_MANA);
+    uint32 baseMana = maxMana > manaFromIntellect ? maxMana - manaFromIntellect : 0;
+
+    if (player->GetCreateMana() != baseMana)
+        player->SetCreateMana(baseMana);
+}
+
 void FinalizeNewAdventurer(Player* player)
 {
     if (!IsAdventurer(player))
@@ -260,7 +284,8 @@ public:
     AdventurerClassPlayerScript() : PlayerScript("AdventurerClassPlayerScript",
     {
         PLAYERHOOK_ON_CREATE,
-        PLAYERHOOK_ON_LOGIN
+        PLAYERHOOK_ON_LOGIN,
+        PLAYERHOOK_ON_UPDATE
     }) {}
 
     void OnPlayerCreate(Player* player) override
@@ -284,6 +309,19 @@ public:
         // Only volatile flags are restored here. No spell or skill is learned,
         // removed or advanced during login for a brand-new Adventurer.
         ApplyServerCapabilities(player);
+    }
+
+    void OnPlayerUpdate(Player* player, uint32 /*diff*/) override
+    {
+        if (!sConfigMgr->GetOption<bool>("SpellDraft.Enable", true))
+            return;
+        if (IsBotSession(player) || !IsAdventurer(player))
+            return;
+
+        // resources.lua can raise MaxMana after login/level/map changes. Keep
+        // BaseMana synchronized continuously; SetCreateMana only writes when the
+        // derived value actually changed, so normal update ticks stay cheap.
+        SyncAdventurerBaseMana(player);
     }
 };
 
