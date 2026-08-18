@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Generate the runtime SpellDraft ability catalog from the live WotLK DBCs.
+"""Generate the runtime SpellDraft ability catalog from canonical WotLK data.
 
-The historical SpellDraft client already carries the curated rarity/class
-metadata in Interface/AddOns/SpellDraft/SpellData.lua. This generator combines
-that authored metadata with the server's own Spell/SkillLine/Talent DBCs so the
-new clean draft engine does not need the historical SQL mirror tables.
+Sources:
+- live server DBCs: spell metadata, skill-line scope and talent exclusion;
+- historical SpellDraft SpellData.lua: curated rarity and class-origin metadata;
+- AzerothCore spell_ranks.sql: canonical rank families.
 
-The generated Lua file contains only root abilities. Rank chains are attached
-to each root and can be upgraded by the runtime as the Adventurer levels.
+Only the first spell of each rank family can become a draft card. Higher ranks
+are attached to that card and learned automatically as the Adventurer levels.
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ from pathlib import Path
 
 MAGIC = b"WDBC"
 HEADER = struct.Struct("<4sIIII")
+REPO = Path(__file__).resolve().parents[3]
+DEFAULT_SPELL_RANKS_SQL = REPO / "data/sql/base/db_world/spell_ranks.sql"
 
 RELEVANT_SKILL_CATEGORIES = {6, 7, 8, 9, 11}
 
@@ -37,8 +39,6 @@ CLASS_SET = {
     "DEATHKNIGHT": 15,
 }
 
-# Trigger/helper spells that were explicitly excluded by the historical
-# SpellDraft implementation. They are not player-facing draft cards.
 BLACKLISTED_SPELLS = {
     20184, 20185, 20187, 20425, 20467,
     27285, 47833, 47834,
@@ -55,8 +55,6 @@ BLACKLISTED_SPELLS = {
     42231,
 }
 
-# Baseline/profession/riding spells are system-owned and must never become a
-# random classless pick. This mirrors the protected set from the old engine.
 PROTECTED_SPELLS = {
     54197, 33388, 33391, 34090, 34091,
     2259, 3101, 3464, 11611, 28596, 51304,
@@ -78,6 +76,7 @@ SPELLDATA_RE = re.compile(
     r"\[(\d+)\]\s*=\s*\{\s*rarity\s*=\s*(-?\d+)\s*,\s*"
     r"class\s*=\s*\"([^\"]+)\"\s*,\s*name\s*=\s*\"((?:\\.|[^\"])*)\""
 )
+RANK_ROW_RE = re.compile(r"\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)\)")
 
 
 class CatalogError(RuntimeError):
@@ -122,8 +121,7 @@ def read_dbc(path: Path) -> DBC:
         raise CatalogError(f"{path}: expected WDBC, got {magic!r}")
     if record_size != fields * 4:
         raise CatalogError(
-            f"{path}: this generator expects 4-byte WotLK fields; "
-            f"fields={fields}, record_size={record_size}"
+            f"{path}: expected 4-byte WotLK fields; fields={fields}, record_size={record_size}"
         )
 
     start = HEADER.size
@@ -141,10 +139,7 @@ def read_dbc(path: Path) -> DBC:
 
 def parse_spell_data(path: Path) -> dict[int, CuratedSpell]:
     if not path.is_file():
-        raise CatalogError(
-            f"SpellDraft client metadata not found: {path}. "
-            "The current migration expects the historical SpellDraft addon."
-        )
+        raise CatalogError(f"SpellDraft client metadata not found: {path}")
 
     text = path.read_text(encoding="utf-8", errors="replace")
     result: dict[int, CuratedSpell] = {}
@@ -160,13 +155,34 @@ def parse_spell_data(path: Path) -> dict[int, CuratedSpell]:
     return result
 
 
-def first_localized_string(dbc: DBC, record: bytes, first_field: int) -> str:
-    """Return the first populated string from a 16-locale WotLK string block.
+def parse_spell_ranks(path: Path) -> tuple[dict[int, int], dict[int, list[tuple[int, int]]]]:
+    """Return spell->root and root->[(rank, spell)] from AzerothCore base SQL."""
+    if not path.is_file():
+        raise CatalogError(f"AzerothCore canonical spell_ranks.sql not found: {path}")
 
-    Extracted client DBCs are locale-dependent. In an esES/esMX extraction the
-    enUS physical slot can legitimately be empty, so catalog eligibility must
-    not assume locale slot zero is populated.
-    """
+    text = path.read_text(encoding="utf-8", errors="replace")
+    root_by_spell: dict[int, int] = {}
+    ranks_by_root: dict[int, list[tuple[int, int]]] = defaultdict(list)
+
+    for first_spell, spell_id, rank in RANK_ROW_RE.findall(text):
+        root = int(first_spell)
+        spell = int(spell_id)
+        rank_no = int(rank)
+        root_by_spell[spell] = root
+        ranks_by_root[root].append((rank_no, spell))
+
+    if len(root_by_spell) < 1000:
+        raise CatalogError(
+            f"{path}: parsed only {len(root_by_spell)} canonical ranked spells"
+        )
+
+    for root in ranks_by_root:
+        ranks_by_root[root].sort(key=lambda item: item[0])
+
+    return root_by_spell, dict(ranks_by_root)
+
+
+def first_localized_string(dbc: DBC, record: bytes, first_field: int) -> str:
     for field in range(first_field, first_field + 16):
         value = dbc.string(record, field).strip()
         if value:
@@ -179,48 +195,30 @@ def spell_meta(spell_dbc: DBC) -> dict[int, dict[str, object]]:
     for row in spell_dbc.records:
         spell_id = spell_dbc.u32(row, 0)
         result[spell_id] = {
-            "id": spell_id,
             "attributes": spell_dbc.u32(row, 4),
             "spell_level": spell_dbc.u32(row, 39),
             "icon": spell_dbc.u32(row, 133),
             "name": first_localized_string(spell_dbc, row, 136),
             "description": first_localized_string(spell_dbc, row, 170),
-            "family": spell_dbc.u32(row, 208),
         }
     return result
 
 
 def skillline_categories(skill_dbc: DBC) -> dict[int, int]:
-    return {
-        skill_dbc.u32(row, 0): skill_dbc.u32(row, 1)
-        for row in skill_dbc.records
-    }
+    return {skill_dbc.u32(row, 0): skill_dbc.u32(row, 1) for row in skill_dbc.records}
 
 
-def skillline_abilities(
+def spell_skill_categories(
     ability_dbc: DBC,
     categories: dict[int, int],
-) -> tuple[dict[int, set[int]], dict[int, int]]:
-    categories_by_spell: dict[int, set[int]] = defaultdict(set)
-    successor: dict[int, int] = {}
-
+) -> dict[int, set[int]]:
+    result: dict[int, set[int]] = defaultdict(set)
     for row in ability_dbc.records:
         skill_line = ability_dbc.u32(row, 1)
         spell_id = ability_dbc.u32(row, 2)
-        if spell_id <= 0:
-            continue
-
-        category = categories.get(skill_line)
-        if category is not None:
-            categories_by_spell[spell_id].add(category)
-
-        next_spell = ability_dbc.u32(row, 8)
-        if next_spell > 0:
-            previous = successor.get(spell_id)
-            if previous is None or previous == next_spell:
-                successor[spell_id] = next_spell
-
-    return categories_by_spell, successor
+        if spell_id > 0 and skill_line in categories:
+            result[spell_id].add(categories[skill_line])
+    return dict(result)
 
 
 def talent_spells(talent_dbc: DBC) -> set[int]:
@@ -246,8 +244,9 @@ def build_catalog(
     curated: dict[int, CuratedSpell],
     spells: dict[int, dict[str, object]],
     categories_by_spell: dict[int, set[int]],
-    successor: dict[int, int],
     talents: set[int],
+    root_by_spell: dict[int, int],
+    ranks_by_root: dict[int, list[tuple[int, int]]],
 ) -> list[dict[str, object]]:
     def rejection_reason(spell_id: int) -> str | None:
         authored = curated.get(spell_id)
@@ -256,6 +255,11 @@ def build_catalog(
             return "missing_curated_metadata"
         if not meta:
             return "missing_spell_dbc"
+
+        canonical_root = root_by_spell.get(spell_id, spell_id)
+        if canonical_root != spell_id:
+            return "nonfirst_rank"
+
         if authored.class_name not in CLASS_SET:
             return "unsupported_class_or_general"
         if authored.rarity < 0 or authored.rarity > 4:
@@ -276,13 +280,11 @@ def build_catalog(
             return "outside_draft_skill_categories"
         return None
 
-    def static_valid(spell_id: int) -> bool:
-        return rejection_reason(spell_id) is None
-
     rejection_counts: Counter[str] = Counter()
     matched_dbc = 0
     localized_descriptions = 0
     relevant_skillline = 0
+
     for spell_id in curated:
         meta = spells.get(spell_id)
         if meta:
@@ -300,59 +302,35 @@ def build_catalog(
     print(f"  IDs present in Spell.dbc: {matched_dbc}")
     print(f"  IDs with any localized description: {localized_descriptions}")
     print(f"  IDs in draft skill-line categories: {relevant_skillline}")
+    print(f"  canonical ranked spell IDs: {len(root_by_spell)}")
+    print(f"  canonical rank families: {len(ranks_by_root)}")
     for reason, count in rejection_counts.most_common():
         print(f"  rejected {reason}: {count}")
 
-    predecessor: dict[int, int] = {}
-    for source, target in successor.items():
-        a = curated.get(source)
-        b = curated.get(target)
-        if not a or not b:
-            continue
-        if a.class_name != b.class_name or a.name != b.name:
-            continue
-        predecessor.setdefault(target, source)
-
-    roots: list[int] = []
-    for spell_id in sorted(curated):
-        if not static_valid(spell_id):
-            continue
-        if spell_id in predecessor and static_valid(predecessor[spell_id]):
-            continue
-        roots.append(spell_id)
+    roots = [
+        spell_id for spell_id in sorted(curated)
+        if rejection_reason(spell_id) is None
+    ]
 
     catalog: list[dict[str, object]] = []
-    consumed: set[int] = set()
-
     for root in roots:
-        if root in consumed:
-            continue
         authored = curated[root]
         root_meta = spells[root]
+        rank_rows = ranks_by_root.get(root, [(1, root)])
         ranks: list[dict[str, int]] = []
-        current = root
         seen: set[int] = set()
 
-        while current > 0 and current not in seen:
-            seen.add(current)
-            current_authored = curated.get(current)
-            current_meta = spells.get(current)
-            if not current_authored or not current_meta:
-                break
-            if (
-                current_authored.class_name != authored.class_name
-                or current_authored.name != authored.name
-            ):
-                break
-            if current in BLACKLISTED_SPELLS or current in talents:
-                break
-
+        for _rank_no, spell_id in rank_rows:
+            if spell_id in seen:
+                continue
+            seen.add(spell_id)
+            meta = spells.get(spell_id)
+            if not meta:
+                continue
             ranks.append({
-                "id": current,
-                "level": int(current_meta["spell_level"]),
+                "id": spell_id,
+                "level": int(meta["spell_level"]),
             })
-            consumed.add(current)
-            current = successor.get(current, 0)
 
         if not ranks:
             ranks = [{"id": root, "level": int(root_meta["spell_level"])}]
@@ -378,7 +356,7 @@ def write_catalog(path: Path, catalog: list[dict[str, object]]) -> None:
     counts = Counter(int(entry["rarity"]) for entry in catalog)
     lines = [
         "-- AUTO-GENERATED by generate_spelldraft_catalog.py. DO NOT EDIT.",
-        "-- Source: live server DBCs + curated historical SpellDraft metadata.",
+        "-- Canonical ranks: AzerothCore data/sql/base/db_world/spell_ranks.sql.",
         "SpellDraftCatalog = {",
     ]
 
@@ -391,12 +369,8 @@ def write_catalog(path: Path, catalog: list[dict[str, object]]) -> None:
             '  { id = %d, rarity = %d, classSet = %d, minLevel = %d, '
             'name = "%s", ranks = { %s } },'
             % (
-                entry["id"],
-                entry["rarity"],
-                entry["classSet"],
-                entry["minLevel"],
-                lua_quote(str(entry["name"])),
-                rank_text,
+                entry["id"], entry["rarity"], entry["classSet"], entry["minLevel"],
+                lua_quote(str(entry["name"])), rank_text,
             )
         )
 
@@ -428,22 +402,20 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dbc-dir", required=True, type=Path)
     parser.add_argument("--spell-data", required=True, type=Path)
+    parser.add_argument("--spell-ranks-sql", type=Path, default=DEFAULT_SPELL_RANKS_SQL)
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
 
     dbc_dir = args.dbc_dir.expanduser().resolve()
-    required = {
-        "Spell.dbc": None,
-        "SkillLine.dbc": None,
-        "SkillLineAbility.dbc": None,
-        "Talent.dbc": None,
-    }
-    missing = [name for name in required if not (dbc_dir / name).is_file()]
-    if missing:
-        raise SystemExit("Missing SpellDraft DBC input(s): " + ", ".join(missing))
+    for name in ("Spell.dbc", "SkillLine.dbc", "SkillLineAbility.dbc", "Talent.dbc"):
+        if not (dbc_dir / name).is_file():
+            raise SystemExit(f"Missing SpellDraft DBC input: {dbc_dir / name}")
 
     try:
         curated = parse_spell_data(args.spell_data.expanduser().resolve())
+        root_by_spell, ranks_by_root = parse_spell_ranks(
+            args.spell_ranks_sql.expanduser().resolve()
+        )
         spell_dbc = read_dbc(dbc_dir / "Spell.dbc")
         skill_dbc = read_dbc(dbc_dir / "SkillLine.dbc")
         ability_dbc = read_dbc(dbc_dir / "SkillLineAbility.dbc")
@@ -451,14 +423,15 @@ def main() -> None:
 
         spells = spell_meta(spell_dbc)
         categories = skillline_categories(skill_dbc)
-        categories_by_spell, successor = skillline_abilities(ability_dbc, categories)
+        categories_by_spell = spell_skill_categories(ability_dbc, categories)
         talents = talent_spells(talent_dbc)
         catalog = build_catalog(
             curated,
             spells,
             categories_by_spell,
-            successor,
             talents,
+            root_by_spell,
+            ranks_by_root,
         )
         write_catalog(args.output.expanduser().resolve(), catalog)
     except CatalogError as exc:
