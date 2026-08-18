@@ -12,6 +12,7 @@ TOOLS_DIR = Path(__file__).resolve().parent
 MODULE = TOOLS_DIR.parent
 REPO = MODULE.parents[1]
 DEFAULT_INSTALL = REPO / "env" / "dist"
+DEFAULT_LOCALE = "esMX"
 ADVENTURER_WORLD_SQL = (
     REPO / "data/sql/updates/pending_db_world/rev_1787027400000000000.sql"
 )
@@ -151,7 +152,7 @@ def main() -> None:
                         help="Optional clean/extracted DBC source to validate")
     parser.add_argument("--client-dir", type=Path,
                         help="Optional WoW 3.3.5a client directory to validate")
-    parser.add_argument("--locale", default="esES")
+    parser.add_argument("--locale", default=DEFAULT_LOCALE)
     args = parser.parse_args()
 
     install = args.install_dir.expanduser().resolve()
@@ -245,6 +246,7 @@ def main() -> None:
         print("CLIENTE")
         print(f"  [{mark(wow.is_file())}] Wow.exe: {wow}")
         print(f"  [{mark((client / 'Data').is_dir())}] Data/: {client / 'Data'}")
+        print(f"  locale esperado: {args.locale}")
         print_client_patch_inventory(client, args.locale)
         print()
 
