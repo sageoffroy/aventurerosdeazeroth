@@ -21,6 +21,7 @@ from pathlib import Path
 OWNER_MANIFEST = ".aventureros-spelldraft.json"
 ADVENTURER_SUFFIX = "Z"
 SPELLDRAFT_SUFFIX = "P"
+DEFAULT_LOCALE = "esMX"
 
 
 def sha256(path: Path) -> str:
@@ -66,6 +67,13 @@ def verify_existing_owned_file(target: Path, expected_hash: str | None) -> None:
         )
 
 
+def owned_locale_path(client: Path, manifest: dict) -> Path | None:
+    relative = manifest.get("locale_patch")
+    if not relative:
+        return None
+    return client / Path(relative)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -80,7 +88,7 @@ def main() -> None:
         type=Path,
         help="Output directory created by build_adventurer_client_patch.py",
     )
-    parser.add_argument("--locale", default="esES")
+    parser.add_argument("--locale", default=DEFAULT_LOCALE)
     args = parser.parse_args()
 
     client = args.client_dir.expanduser().resolve()
@@ -108,14 +116,25 @@ def main() -> None:
     target_locale.parent.mkdir(parents=True, exist_ok=True)
 
     previous = load_owner_manifest(client)
+    old_locale_target: Path | None = None
+
     if previous:
-        if previous.get("locale") != args.locale:
-            raise SystemExit(
-                f"Existing SpellDraft install uses locale {previous.get('locale')!r}; "
-                f"requested {args.locale!r}."
-            )
         verify_existing_owned_file(target_root, previous.get("root_sha256"))
-        verify_existing_owned_file(target_locale, previous.get("locale_sha256"))
+
+        previous_locale = previous.get("locale")
+        old_locale_target = owned_locale_path(client, previous)
+        if old_locale_target:
+            verify_existing_owned_file(old_locale_target, previous.get("locale_sha256"))
+
+        if previous_locale == args.locale:
+            verify_existing_owned_file(target_locale, previous.get("locale_sha256"))
+        elif target_locale.exists():
+            raise SystemExit(
+                "Requested locale migration would overwrite an unowned reserved Z file:\n"
+                f"  {target_locale}\n"
+                f"Existing owned locale: {previous_locale!r}; requested: {args.locale!r}.\n"
+                "Delete the old/unowned target explicitly if it is yours, then rerun."
+            )
     else:
         verify_existing_owned_file(target_root, None)
         verify_existing_owned_file(target_locale, None)
@@ -123,9 +142,13 @@ def main() -> None:
     shutil.copy2(source_root, target_root)
     shutil.copy2(source_locale, target_locale)
 
+    if old_locale_target and old_locale_target != target_locale and old_locale_target.exists():
+        old_locale_target.unlink()
+        print(f"Removed previous owned locale patch: {old_locale_target}")
+
     manifest = {
         "owner": "Aventureros de Azeroth / SpellDraft",
-        "version": 2,
+        "version": 3,
         "locale": args.locale,
         "reserved_slots": {
             "spelldraft": SPELLDRAFT_SUFFIX,
@@ -143,8 +166,6 @@ def main() -> None:
         encoding="utf-8",
     )
 
-    # WoW caches DBC-derived client data. Removing WDB is safe; the client
-    # recreates it on the next launch. Do not delete any broader client data.
     wdb = client / "Cache" / "WDB"
     if wdb.exists():
         shutil.rmtree(wdb)
@@ -152,6 +173,7 @@ def main() -> None:
     print("Adventurer client patch installed in the reserved Z slot:")
     print(f"  {target_root}")
     print(f"  {target_locale}")
+    print(f"  locale: {args.locale}")
     print(f"  P remains reserved for SpellDraft assets: patch-{SPELLDRAFT_SUFFIX}.mpq")
     print(f"  ownership manifest: {client / OWNER_MANIFEST}")
     print("  Cache/WDB cleared")
