@@ -217,15 +217,23 @@ def validate_normalized_spells() -> None:
         "build_catalog(": "normalizer reuses exact production SpellDraft eligibility",
         "parse_spell_ranks": "normalizer reads canonical rank families",
         '"SpellDuration.dbc"': "normalizer reads native rank durations",
-        "collapse": "duplicate-level rank policy is documented in generator",
+        "strongest_by_level": "duplicate-level rank anchors keep the strongest sample",
         "DEFAULT_PINNED_IDS": "normalizer preserves established custom IDs",
         "EFFECT_DIE_SIDES": "normalizer owns native random effect ranges",
         "EFFECT_REAL_POINTS_PER_LEVEL": "normalizer disables hidden native per-level scaling on custom effects",
-        "custom_spell_scaling.tsv": "normalizer documents runtime scaling output",
+        '"--scaling-output"': "normalizer emits the runtime per-level scaling table",
         "replace_original": "resolved registry marks native cards for replacement",
     }
     for token, label in normalizer_expectations.items():
         require(token in normalizer, label)
+
+    finalizer = read(TOOLS / "finalize_normalized_spell_dbcs.py")
+    require("RANK_FIRST_FIELD = 153" in finalizer and "RANK_LAST_FIELD = 168" in finalizer,
+            "custom Spell.dbc rows clear every localized rank subtext")
+    require("ADVENTURER_CLASS_MASK = 512" in finalizer,
+            "custom SkillLineAbility rows target Adventurer class 10")
+    require("SKILLLINE_RACE_MASK_FIELD: 0" in finalizer,
+            "custom SkillLineAbility rows are valid for every playable race")
 
     replacement = read(TOOLS / "apply_normalized_catalog.py")
     require("native roots survived normalized catalog replacement" in replacement,
@@ -251,6 +259,9 @@ def validate_normalized_spells() -> None:
     require("201000" in scaling and "201999" in scaling,
             "runtime accepts only reserved custom spell IDs")
 
+    world_header = read(MODULE / "src/SpellDraftWorldScript.h")
+    require("WORLDHOOK_ON_STARTUP" in world_header,
+            "normalized scaling is loaded reliably at world startup")
     world_script = read(MODULE / "src/SpellDraftWorldScript.cpp")
     require("ConfigureCustomSpellScaling(enabled)" in world_script,
             "normalized runtime follows SpellDraft.Enable and config reloads")
@@ -266,13 +277,16 @@ def validate_normalized_spells() -> None:
             "first-run requires SpellDuration.dbc for rank-duration anchors")
     require("generate_normalized_spells.py" in prepare,
             "first-run generates normalized custom spell DBCs")
+    require("finalize_normalized_spell_dbcs.py" in prepare,
+            "first-run strips native rank labels and class restrictions")
     require("apply_normalized_catalog.py" in prepare,
             "first-run replaces native draft cards with custom cards")
     require(
         prepare.index("generate_normalized_spells.py")
+        < prepare.index("finalize_normalized_spell_dbcs.py")
         < prepare.index("generate_spelldraft_catalog.py")
         < prepare.index("apply_normalized_catalog.py"),
-        "first-run orders normalize -> base catalog -> strict replacement",
+        "first-run orders normalize -> finalize -> base catalog -> strict replacement",
     )
 
 
