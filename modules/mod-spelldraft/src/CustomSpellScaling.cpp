@@ -8,6 +8,7 @@
 #include "Spell.h"
 
 #include <array>
+#include <exception>
 #include <fstream>
 #include <sstream>
 #include <string>
