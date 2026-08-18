@@ -1,5 +1,6 @@
 #include "SpellDraftWorldScript.h"
 
+#include "CustomSpellScaling.h"
 #include "Configuration/Config.h"
 #include "Log.h"
 
@@ -7,6 +8,8 @@ void SpellDraftWorldScript::OnAfterConfigLoad(bool reload)
 {
     bool const enabled =
         sConfigMgr->GetOption<bool>("SpellDraft.Enable", true);
+
+    ConfigureCustomSpellScaling(enabled);
 
     LOG_INFO(
         "module.SpellDraft",
