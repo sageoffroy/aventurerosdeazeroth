@@ -182,6 +182,19 @@ def main() -> None:
         str(normalized_resolved),
     )
 
+    # The historical Grimoire recognizes only IDs present in SpellData.lua and
+    # its fallback compares English metadata names against localized client
+    # names. Install explicit 201xxx -> native-root metadata aliases so every
+    # normalized spell is visible in the Grimoire regardless of client locale.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "patch_spelldraft_grimoire.py"),
+        "--client-dir",
+        str(client),
+        "--resolved",
+        str(normalized_resolved),
+    )
+
     # AzerothCore only loads the stock playercreateinfo_skills language/racial
     # rows when SkillRaceClassInfo.dbc also authorizes the race/class pair.
     run(
@@ -235,6 +248,7 @@ def main() -> None:
     print("SpellDraft real catalog generated from live DBCs.")
     print("Reviewed early-game native spell families replaced by normalized 201xxx cards.")
     print("Reviewed talent/internal false roots removed from the draft catalog.")
+    print("Normalized 201xxx metadata aliases installed for the SpellDraft Grimoire.")
     print("No se inicio MySQL, authserver ni worldserver.")
     print("No fue necesario recompilar el core para preparar los datos/cliente.")
 
