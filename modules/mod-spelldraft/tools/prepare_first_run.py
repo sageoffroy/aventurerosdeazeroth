@@ -143,6 +143,17 @@ def main() -> None:
         str(normalized_scaling),
     )
 
+    # Strip inherited "Rank 1" subtexts and authorize the generated
+    # SkillLineAbility rows for Adventurer class 10/all playable races.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "finalize_normalized_spell_dbcs.py"),
+        "--dbc-dir",
+        str(dbc_src),
+        "--resolved",
+        str(normalized_resolved),
+    )
+
     # Build the canonical native draft pool first. SpellData.lua is used only
     # as the authored rarity/class map; levels, passivity, skill-line scope,
     # talent exclusion and rank chains come from live/current data.
