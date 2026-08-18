@@ -22,6 +22,10 @@ REQUIRED_ADVENTURER_DBCS = (
     "CharBaseInfo.dbc",
     "CharStartOutfit.dbc",
     "SkillRaceClassInfo.dbc",
+    "Spell.dbc",
+    "SkillLine.dbc",
+    "SkillLineAbility.dbc",
+    "Talent.dbc",
 )
 SPELLDRAFT_SUFFIX = "P"
 ADVENTURER_SUFFIX = "Z"
@@ -222,12 +226,24 @@ def main() -> None:
         "build_adventurer_client_patch.py",
         "install_adventurer_client_patch.py",
         "patch_adventurer_class_dbcs.py",
+        "generate_spelldraft_catalog.py",
         "mpq_writer.py",
         "prepare_first_run.py",
         "validate_repo_assets.py",
     ):
         path = TOOLS_DIR / script
         print(f"  [{mark(path.is_file())}] {script}")
+
+    runtime_catalog = bin_dir / "lua_scripts" / "SpellDraft" / "catalog.lua"
+    catalog_ok = runtime_catalog.is_file()
+    if catalog_ok:
+        catalog_text = runtime_catalog.read_text(encoding="utf-8", errors="replace")
+        catalog_ok = (
+            "SpellDraftCatalog = {" in catalog_text
+            and "SpellDraftRarityDistribution = {" in catalog_text
+            and runtime_catalog.stat().st_size > 1024
+        )
+    print(f"  [{mark(catalog_ok)}] catalogo real runtime: {runtime_catalog}")
     print()
 
     if args.dbc_src:
@@ -243,9 +259,11 @@ def main() -> None:
         wow = client / "Wow.exe"
         if not wow.is_file():
             wow = client / "wow.exe"
+        spell_data = client / "Interface" / "AddOns" / "SpellDraft" / "SpellData.lua"
         print("CLIENTE")
         print(f"  [{mark(wow.is_file())}] Wow.exe: {wow}")
         print(f"  [{mark((client / 'Data').is_dir())}] Data/: {client / 'Data'}")
+        print(f"  [{mark(spell_data.is_file())}] SpellDraft SpellData.lua: {spell_data}")
         print(f"  locale esperado: {args.locale}")
         print_client_patch_inventory(client, args.locale)
         print()
