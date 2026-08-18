@@ -58,6 +58,7 @@
     "low_level_offset": 2.0,
     "random_range": "runtime_roll",
     "duration": "rank_step",
-    "notes": "Each varying Spell.dbc effect is normalized independently. Native rank values become anchors; the custom spell has no ranks. Mechanics, targets, visuals, coefficients, costs and non-varying effect values remain inherited from the first native rank. Anchors above the runtime level cap remain source/reference data; runtime output stops at level 60."
+    "cast_time": "highest_native_rank_at_runtime_cap",
+    "notes": "Each varying Spell.dbc effect is normalized independently. Native rank values become anchors; the custom spell has no ranks. Mechanics, targets, visuals, coefficients, costs and non-varying effect values remain inherited from the first native rank. Anchors above the runtime level cap remain source/reference data; runtime output stops at level 60. Until a per-level cast-time hook is added, the custom spell uses the cast-time index of the highest native rank at or below the runtime cap so high-rank damage can never inherit an artificially short Rank-1 cast."
   }
 }
