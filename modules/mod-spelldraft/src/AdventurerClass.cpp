@@ -82,7 +82,9 @@ constexpr uint32 UNDEAD_SPELLS[] = { 7744, 20577, 5227, 20579 };
 constexpr uint32 TAUREN_SPELLS[] = { 20549, 20550, 20552, 20551 };
 constexpr uint32 GNOME_SPELLS[] = { 20589, 20591, 20593, 20592 };
 constexpr uint32 TROLL_SPELLS[] = { 26297, 20555, 20557, 20558, 26290, 58943 };
-constexpr uint32 BLOOD_ELF_SPELLS[] = { 28730, 20554, 822 };
+// 20554 is the removed pre-WotLK mana-user version of Troll Berserking. Blood
+// Elves use Arcane Affinity 28877 instead.
+constexpr uint32 BLOOD_ELF_SPELLS[] = { 28730, 28877, 822 };
 // 28877 teaches racial skill 756, which is not valid for Draenei (race 11).
 constexpr uint32 DRAENEI_SPELLS[] = { 59547, 28878, 28875 };
 
