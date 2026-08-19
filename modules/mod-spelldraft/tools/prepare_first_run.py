@@ -195,6 +195,16 @@ def main() -> None:
         str(normalized_resolved),
     )
 
+    # The stock 3.3.5a client does not expose native combo-point packet state to
+    # GetComboPoints() for custom class ID 10. Install the client half of the
+    # authoritative server combo bridge while keeping Blizzard's ComboFrame.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "patch_spelldraft_combo_ui.py"),
+        "--client-dir",
+        str(client),
+    )
+
     # AzerothCore only loads the stock playercreateinfo_skills language/racial
     # rows when SkillRaceClassInfo.dbc also authorizes the race/class pair.
     run(
@@ -249,6 +259,7 @@ def main() -> None:
     print("Reviewed early-game native spell families replaced by normalized 201xxx cards.")
     print("Reviewed talent/internal false roots removed from the draft catalog.")
     print("Normalized 201xxx metadata aliases installed for the SpellDraft Grimoire.")
+    print("Adventurer combo-point client compatibility installed for Blizzard ComboFrame.")
     print("No se inicio MySQL, authserver ni worldserver.")
     print("No fue necesario recompilar el core para preparar los datos/cliente.")
 
