@@ -129,9 +129,10 @@ def main() -> None:
         str(install),
     )
 
-    # Select rank families and create one 201xxx DBC clone per family. This
-    # first pass also writes generic effect anchors used as the safe fallback
-    # for profiles that do not yet have specialized semantics.
+    # Select rank families and create one 201xxx DBC clone per family. The
+    # reviewed wrapper delegates the clone/effect work to
+    # generate_normalized_spells.py; this first pass also writes generic effect
+    # anchors used as the safe fallback for profiles not specialized yet.
     run(
         sys.executable,
         str(TOOLS_DIR / "generate_reviewed_normalized_spells.py"),
@@ -172,6 +173,19 @@ def main() -> None:
         str(normalized_scaling),
         "--profiles-output",
         str(normalized_profiles),
+    )
+
+    # Fail before packaging if a native rank anchor does not round-trip exactly
+    # through the profile runtime representation.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "validate_profiled_spell_scaling.py"),
+        "--profiles",
+        str(normalized_profiles),
+        "--scaling",
+        str(normalized_scaling),
+        "--dbc-dir",
+        str(dbc_src),
     )
 
     # Build the canonical native draft pool first. SpellData.lua is used only
