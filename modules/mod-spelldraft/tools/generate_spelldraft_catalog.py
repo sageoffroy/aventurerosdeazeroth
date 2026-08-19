@@ -43,6 +43,13 @@ CLASS_SET = {
     "DEATHKNIGHT": 15,
 }
 
+# Metamorphosis is intentionally promoted from a talent-only spell into a
+# SpellDraft package card. Keep its real acquisition level while the project is
+# still using the temporary <=20 normalization cohort, so it does not silently
+# enter that cohort before its high-level reference profile is completed.
+ALLOWED_TALENT_CARDS = {47241}
+MIN_LEVEL_OVERRIDES = {47241: 60}
+
 BLACKLISTED_SPELLS = {
     20184, 20185, 20187, 20425, 20467,
     27285, 47833, 47834,
@@ -50,7 +57,6 @@ BLACKLISTED_SPELLS = {
     34919,
     42234, 42243, 42244, 42245,
     42651,
-    47241,
     12976,
     33891,
     47666, 47750,
@@ -201,7 +207,7 @@ def load_rarity_overrides(path: Path) -> dict[int, int]:
     return result
 
 
-def load_card_dependencies(path: Path) -> dict[int, dict[str, list[str]]]:
+def load_card_dependencies(path: Path) -> dict[int, dict[str, object]]:
     if not path.is_file():
         raise CatalogError(f"Card dependency metadata not found: {path}")
 
@@ -223,8 +229,8 @@ def load_card_dependencies(path: Path) -> dict[int, dict[str, list[str]]]:
             f"{path}: expected a cards object"
         )
 
-    allowed_fields = {"grants", "requires", "synergy"}
-    result: dict[int, dict[str, list[str]]] = {}
+    allowed_fields = {"grants", "requires", "synergy", "teaches"}
+    result: dict[int, dict[str, object]] = {}
 
     for raw_spell_id, spec in cards.items():
         try:
@@ -246,7 +252,7 @@ def load_card_dependencies(path: Path) -> dict[int, dict[str, list[str]]]:
                 + ", ".join(sorted(unknown))
             )
 
-        normalized: dict[str, list[str]] = {}
+        normalized: dict[str, object] = {}
 
         for field in ("grants", "requires", "synergy"):
             values = spec.get(field, [])
@@ -277,6 +283,32 @@ def load_card_dependencies(path: Path) -> dict[int, dict[str, list[str]]]:
 
             normalized[field] = cleaned
 
+        teaches = spec.get("teaches", [])
+        if not isinstance(teaches, list):
+            raise CatalogError(
+                f"{path}: card {spell_id}.teaches must be a list"
+            )
+
+        cleaned_teaches: list[int] = []
+        for taught_spell_id in teaches:
+            if (
+                isinstance(taught_spell_id, bool)
+                or not isinstance(taught_spell_id, int)
+                or taught_spell_id <= 0
+            ):
+                raise CatalogError(
+                    f"{path}: card {spell_id}.teaches values must be positive spell IDs"
+                )
+
+            if taught_spell_id == spell_id:
+                raise CatalogError(
+                    f"{path}: card {spell_id} cannot teach itself"
+                )
+
+            if taught_spell_id not in cleaned_teaches:
+                cleaned_teaches.append(taught_spell_id)
+
+        normalized["teaches"] = cleaned_teaches
         result[spell_id] = normalized
 
     return result
@@ -375,6 +407,12 @@ def lua_string_list(values: list[str]) -> str:
     ) + " }"
 
 
+def lua_int_list(values: list[int]) -> str:
+    if not values:
+        return "{}"
+    return "{ " + ", ".join(str(value) for value in values) + " }"
+
+
 def build_catalog(
     curated: dict[int, CuratedSpell],
     spells: dict[int, dict[str, object]],
@@ -382,7 +420,7 @@ def build_catalog(
     talents: set[int],
     root_by_spell: dict[int, int],
     ranks_by_root: dict[int, list[tuple[int, int]]],
-    dependencies: dict[int, dict[str, list[str]]],
+    dependencies: dict[int, dict[str, object]],
     rarity_overrides: dict[int, int],
 ) -> list[dict[str, object]]:
     def rejection_reason(spell_id: int) -> str | None:
@@ -405,7 +443,7 @@ def build_catalog(
             return "technical_blacklist"
         if spell_id in PROTECTED_SPELLS:
             return "protected_system_spell"
-        if spell_id in talents:
+        if spell_id in talents and spell_id not in ALLOWED_TALENT_CARDS:
             return "talent_spell"
         if int(meta["attributes"]) & 0x00000040:
             return "passive"
@@ -478,11 +516,12 @@ def build_catalog(
             "id": root,
             "rarity": rarity_overrides.get(root, authored.rarity),
             "classSet": CLASS_SET[authored.class_name],
-            "minLevel": int(root_meta["spell_level"]),
+            "minLevel": MIN_LEVEL_OVERRIDES.get(root, int(root_meta["spell_level"])),
             "name": authored.name,
             "grants": list(dependency.get("grants", [])),
             "requires": list(dependency.get("requires", [])),
             "synergy": list(dependency.get("synergy", [])),
+            "teaches": list(dependency.get("teaches", [])),
             "ranks": ranks,
         })
 
@@ -527,6 +566,22 @@ def write_catalog(path: Path, catalog: list[dict[str, object]]) -> None:
     lines.extend([
         "}",
         "",
+        "SpellDraftTeachMap = {",
+    ])
+
+    for entry in catalog:
+        teaches = list(entry.get("teaches", []))
+        if teaches:
+            lines.append(
+                "  [%d] = %s," % (
+                    int(entry["id"]),
+                    lua_int_list(teaches),
+                )
+            )
+
+    lines.extend([
+        "}",
+        "",
         "SpellDraftRarityDistribution = {",
         "  [0] = 70.0,",
         "  [1] = 20.0,",
@@ -540,11 +595,13 @@ def write_catalog(path: Path, catalog: list[dict[str, object]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(lines), encoding="utf-8")
 
+    teaches = sum(1 for entry in catalog if entry.get("teaches"))
     print(f"SpellDraft real catalog generated: {len(catalog)} root abilities")
     print(
         "  rarity roots: "
         + ", ".join(f"R{rarity}={counts.get(rarity, 0)}" for rarity in range(5))
     )
+    print(f"  teach packages: {teaches}")
     print(f"  output: {path}")
 
 
