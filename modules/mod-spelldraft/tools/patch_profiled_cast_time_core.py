@@ -6,10 +6,12 @@ PLAYERHOOK_ON_SPELL_CAST fires later when the cast is executed. Effect values
 can be replaced from that hook, but cast time cannot: the timer and
 SMSG_SPELL_START have already been committed.
 
-The project therefore uses one deliberately tiny core bridge. Spell.cpp asks
-mod-spelldraft for the custom cast time immediately after normal AzerothCore
-CalcCastTime() processing and before movement checks/ReSetTimer(). Non-custom
-spells receive the unmodified fallback value.
+The project therefore uses one deliberately tiny core bridge. For a normalized
+201xxx spell, Spell.cpp asks mod-spelldraft for the interpolated BASE cast time,
+then runs AzerothCore's normal ranged-slot adjustment and ModSpellCastTime()
+processing on that base. Haste, spell modifiers and other normal cast-time
+mechanics therefore remain active. Non-custom and triggered-direct spells keep
+the stock path unchanged.
 
 The patch is idempotent and keeps all profile data/selection inside the module.
 """
@@ -29,8 +31,22 @@ DECLARATION = (
     "Player const* player, uint32 spellId, int32 fallbackCastTime);"
 )
 
-CALL_BLOCK = """    if (Player* playerCaster = m_caster->ToPlayer())
-        m_casttime = GetAventurerosCustomSpellCastTime(playerCaster, m_spellInfo->Id, m_casttime);"""
+CALL_BLOCK = """    if (!HasTriggeredCastFlag(TRIGGERED_CAST_DIRECTLY))
+    {
+        if (Player* playerCaster = m_caster->ToPlayer())
+        {
+            int32 customBaseCastTime = GetAventurerosCustomSpellCastTime(
+                playerCaster, m_spellInfo->Id, -1);
+            if (customBaseCastTime >= 0)
+            {
+                m_casttime = customBaseCastTime;
+                if (m_spellInfo->HasAttribute(SPELL_ATTR0_USES_RANGED_SLOT)
+                    && !m_spellInfo->IsAutoRepeatRangedSpell())
+                    m_casttime += 500;
+                m_caster->ModSpellCastTime(m_spellInfo, m_casttime, this);
+            }
+        }
+    }"""
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
@@ -83,9 +99,12 @@ def validate(root: Path) -> None:
         raise PatchError("Spell.cpp does not contain exactly one Aventureros cast-time bridge call")
 
     call_pos = text.index(CALL_BLOCK)
+    cheat_pos = text.find("GetCommandStatus(CHEAT_CASTTIME)", call_pos)
     timer_pos = text.find("ReSetTimer();", call_pos)
-    if timer_pos < 0:
-        raise PatchError("Aventureros cast-time bridge is not before Spell::ReSetTimer()")
+    if cheat_pos < 0 or timer_pos < 0 or not call_pos < cheat_pos < timer_pos:
+        raise PatchError(
+            "Aventureros cast-time bridge must run before cheat handling and ReSetTimer()"
+        )
 
 
 def main() -> None:
@@ -107,8 +126,10 @@ def main() -> None:
 
     print("Aventureros profiled cast-time core bridge validated:")
     print(f"  Spell.cpp: {'patched' if changed else 'already patched'}")
-    print("  hook point: after CalcCastTime(), before movement checks/ReSetTimer()")
-    print("  non-custom spells keep AzerothCore's original cast time")
+    print("  normalized cast base: interpolated by player level")
+    print("  normal haste/spell cast modifiers: preserved")
+    print("  triggered-direct/non-custom spells: stock path unchanged")
+    print("  hook point: before cheat handling, movement checks and ReSetTimer()")
 
 
 if __name__ == "__main__":
