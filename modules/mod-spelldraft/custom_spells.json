@@ -60,12 +60,15 @@
     "integer_amounts": "nearest_integer",
     "duration": "piecewise_linear_nearest_1s",
     "cast_time": "piecewise_linear_nearest_0.1s",
+    "periodic_damage": "per_tick_integer_interpolation",
     "damage_with_dot": [
       "direct_min_max",
-      "dot_total",
+      "dot_tick_min_max",
+      "dot_total_reference",
       "duration",
+      "tick_interval",
       "cast_time"
     ],
-    "notes": "Native WoW ranks are semantic anchors. Specialized profiles keep fields with their real meaning instead of treating every effect as an anonymous min/max pair. damage_with_dot stores direct damage, total periodic damage, duration and cast time; missing player levels are interpolated. The runtime converts total DoT back to the per-tick base value AzerothCore expects. Generic effect curves remain as a fallback for profiles not specialized yet. Spell power, crit, haste, buffs/debuffs and target modifiers remain normal AzerothCore mechanics and are not baked into the base level curves."
+    "notes": "Native WoW ranks are semantic anchors. Specialized profiles keep fields with their real meaning instead of treating every effect as an anonymous min/max pair. Periodic damage is interpolated as the integer per-tick value AzerothCore actually executes; the visible total is always derived from that tick amount and the runtime tick count, so server and tooltip cannot diverge through integer division. Native anchors also retain dot_total as a reference invariant and must reproduce it exactly. Missing player levels are interpolated. Generic effect curves remain as a fallback for profiles not specialized yet. Spell power, crit, haste, buffs/debuffs and target modifiers remain normal AzerothCore mechanics and are not baked into the base level curves."
   }
 }
