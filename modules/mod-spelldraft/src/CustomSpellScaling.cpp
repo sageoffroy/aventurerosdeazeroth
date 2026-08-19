@@ -309,11 +309,10 @@ public:
 };
 }
 
-// Spell::prepare() calls this through the small Aventureros core bridge after
-// AzerothCore has applied normal haste/spell modifiers and before the cast timer
-// is committed/sent to the client. Keeping cast-time selection here means the
-// same profile table owns cast time and effect values without mutating shared
-// SpellInfo/DBC records at runtime.
+// Spell::prepare() asks for the level-specific BASE cast time. The tiny core
+// bridge then applies the same ranged-slot adjustment and ModSpellCastTime()
+// processing that AzerothCore normally applies, so haste and spell modifiers
+// remain normal game mechanics instead of being baked into the profile table.
 int32 GetAventurerosCustomSpellCastTime(Player const* player, uint32 spellId, int32 fallbackCastTime)
 {
     LevelRule const* rule = FindLevelRule(player, spellId);
