@@ -25,6 +25,7 @@ REQUIRED_DBCS = (
     "CharStartOutfit.dbc",
     "SkillRaceClassInfo.dbc",
     "Spell.dbc",
+    "SpellCastTimes.dbc",
     "SpellDuration.dbc",
     "SkillLine.dbc",
     "SkillLineAbility.dbc",
@@ -99,6 +100,7 @@ def main() -> None:
     runtime_catalog = install / "bin" / "lua_scripts" / "SpellDraft" / "catalog.lua"
     normalized_data = data_dir / "spelldraft"
     normalized_resolved = normalized_data / "custom_spells.resolved.json"
+    normalized_profiles = normalized_data / "custom_spell_profiles.resolved.json"
     normalized_scaling = normalized_data / "custom_spell_scaling.tsv"
 
     print("=== Aventureros de Azeroth: preparacion primera ejecucion ===")
@@ -127,11 +129,9 @@ def main() -> None:
         str(install),
     )
 
-    # Normalize only reviewed standalone early-game class families. The reviewed
-    # wrapper delegates the actual DBC/scaling generation to
-    # generate_normalized_spells.py after filtering known false roots. Talent
-    # proc effects, talent-granted helpers and duplicate internal roots are
-    # excluded before custom IDs are assigned.
+    # Select rank families and create one 201xxx DBC clone per family. This
+    # first pass also writes generic effect anchors used as the safe fallback
+    # for profiles that do not yet have specialized semantics.
     run(
         sys.executable,
         str(TOOLS_DIR / "generate_reviewed_normalized_spells.py"),
@@ -145,8 +145,9 @@ def main() -> None:
         str(normalized_scaling),
     )
 
-    # Strip inherited "Rank 1" subtexts and authorize the generated
-    # SkillLineAbility rows for Adventurer class 10/all playable races.
+    # Strip inherited rank/skill semantics. The old conservative cast-time
+    # choice is intentionally overwritten by the profile stage immediately
+    # below; the custom DBC fallback becomes the native root/rank-1 cast again.
     run(
         sys.executable,
         str(TOOLS_DIR / "finalize_normalized_spell_dbcs.py"),
@@ -154,6 +155,23 @@ def main() -> None:
         str(dbc_src),
         "--resolved",
         str(normalized_resolved),
+    )
+
+    # Resolve profile-aware native anchors. damage_with_dot spells explicitly
+    # carry direct damage, total DoT, duration and cast time. All profiles get
+    # interpolated cast/duration values; un-specialized effects retain the
+    # generic effect-curve fallback. This overwrites the runtime TSV with v2.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "generate_profiled_spell_scaling.py"),
+        "--dbc-dir",
+        str(dbc_src),
+        "--resolved",
+        str(normalized_resolved),
+        "--scaling-output",
+        str(normalized_scaling),
+        "--profiles-output",
+        str(normalized_profiles),
     )
 
     # Build the canonical native draft pool first. SpellData.lua is used only
@@ -171,8 +189,7 @@ def main() -> None:
     )
 
     # Remove reviewed false roots entirely, then strictly replace every selected
-    # native root with its rankless 201xxx card. The reviewed wrapper delegates
-    # strict one-for-one replacement to apply_normalized_catalog.py.
+    # native root with its rankless 201xxx card.
     run(
         sys.executable,
         str(TOOLS_DIR / "apply_reviewed_normalized_catalog.py"),
@@ -182,10 +199,7 @@ def main() -> None:
         str(normalized_resolved),
     )
 
-    # The historical Grimoire recognizes only IDs present in SpellData.lua and
-    # its fallback compares English metadata names against localized client
-    # names. Install explicit 201xxx -> native-root metadata aliases so every
-    # normalized spell is visible in the Grimoire regardless of client locale.
+    # The historical Grimoire recognizes only IDs present in SpellData.lua.
     run(
         sys.executable,
         str(TOOLS_DIR / "patch_spelldraft_grimoire.py"),
@@ -195,27 +209,22 @@ def main() -> None:
         str(normalized_resolved),
     )
 
-    # Client spell descriptions cannot see the server-side TSV. Generate only
-    # the native rank anchors already preserved in custom_spells.resolved.json
-    # and interpolate them in Lua. The tool first proves those anchors reproduce
-    # every server TSV level exactly, then removes the legacy 60-row curve files
-    # from the addon's load order.
+    # Install the same semantic native-rank anchors in the loose addon. The
+    # client interpolates direct damage, total DoT, duration and cast time from
+    # anchors instead of serializing 60 rows per spell.
     run(
         sys.executable,
-        str(TOOLS_DIR / "patch_spelldraft_scaled_tooltips.py"),
+        str(TOOLS_DIR / "patch_spelldraft_profiled_tooltips.py"),
         "--client-dir",
         str(client),
-        "--resolved",
-        str(normalized_resolved),
-        "--scaling",
-        str(normalized_scaling),
+        "--profiles",
+        str(normalized_profiles),
         "--dbc-dir",
         str(dbc_src),
     )
 
     # The stock 3.3.5a client does not expose native combo-point packet state to
-    # GetComboPoints() for custom class ID 10. Install the client half of the
-    # authoritative server combo bridge while keeping Blizzard's ComboFrame.
+    # GetComboPoints() for custom class ID 10.
     run(
         sys.executable,
         str(TOOLS_DIR / "patch_spelldraft_combo_ui.py"),
@@ -275,12 +284,12 @@ def main() -> None:
     print("Preparacion completa.")
     print("SpellDraft real catalog generated from live DBCs.")
     print("Reviewed early-game native spell families replaced by normalized 201xxx cards.")
-    print("Reviewed talent/internal false roots removed from the draft catalog.")
+    print("Profile-aware anchors generated: damage/effects + DoT total + duration + cast time.")
     print("Normalized 201xxx metadata aliases installed for the SpellDraft Grimoire.")
-    print("Compact native-rank tooltip anchors installed; legacy 60-row client curves disabled.")
+    print("Compact profile-aware tooltips installed; legacy per-level client curves disabled.")
     print("Adventurer combo-point client compatibility installed for Blizzard ComboFrame.")
     print("No se inicio MySQL, authserver ni worldserver.")
-    print("No fue necesario recompilar el core para preparar los datos/cliente.")
+    print("Este script no recompila C++; el puente de cast-time debe estar compilado en worldserver.")
 
 
 if __name__ == "__main__":
