@@ -16,6 +16,13 @@
 #include <utility>
 #include <vector>
 
+// Defined by the tiny optional bridge installed in Spell.cpp. The core owns the
+// resolver slot, so a build with mod-spelldraft disabled never has a core ->
+// module symbol dependency. When this module is enabled it registers the
+// level-aware base-cast resolver after the profile table loads successfully.
+using AventurerosCustomSpellCastTimeResolver = int32 (*)(Player const*, uint32, int32);
+void SetAventurerosCustomSpellCastTimeResolver(AventurerosCustomSpellCastTimeResolver resolver);
+
 namespace
 {
 struct EffectRange
@@ -102,6 +109,12 @@ LevelRule const* FindLevelRule(Player const* player, uint32 spellId)
 
     LevelRule const& rule = levels[level];
     return rule.present ? &rule : nullptr;
+}
+
+int32 ResolveProfiledCastTime(Player const* player, uint32 spellId, int32 fallbackCastTime)
+{
+    LevelRule const* rule = FindLevelRule(player, spellId);
+    return rule ? rule->castTimeMs : fallbackCastTime;
 }
 
 bool LoadScalingFile(std::string const& path)
@@ -309,18 +322,11 @@ public:
 };
 }
 
-// Spell::prepare() asks for the level-specific BASE cast time. The tiny core
-// bridge then applies the same ranged-slot adjustment and ModSpellCastTime()
-// processing that AzerothCore normally applies, so haste and spell modifiers
-// remain normal game mechanics instead of being baked into the profile table.
-int32 GetAventurerosCustomSpellCastTime(Player const* player, uint32 spellId, int32 fallbackCastTime)
-{
-    LevelRule const* rule = FindLevelRule(player, spellId);
-    return rule ? rule->castTimeMs : fallbackCastTime;
-}
-
 void ConfigureCustomSpellScaling(bool enabled)
 {
+    // Disable the core bridge first so config reloads can never keep a stale
+    // resolver while the table is being replaced or if parsing fails.
+    SetAventurerosCustomSpellCastTimeResolver(nullptr);
     g_customScalingEnabled = false;
     g_customScaling.clear();
 
@@ -338,6 +344,7 @@ void ConfigureCustomSpellScaling(bool enabled)
         return;
 
     g_customScalingEnabled = true;
+    SetAventurerosCustomSpellCastTimeResolver(ResolveProfiledCastTime);
 }
 
 void AddCustomSpellScalingScripts()
