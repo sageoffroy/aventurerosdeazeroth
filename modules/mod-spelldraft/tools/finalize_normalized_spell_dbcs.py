@@ -17,14 +17,12 @@ skill-rank gates are equally invalid for a rankless custom spell, so those
 fields are cleared while the SkillLine itself is preserved for spellbook/UI
 categorization.
 
-Cast time needs special handling too. WotLK rank families such as Frostbolt and
-Fireball can start with a shorter low-rank cast. Giving a level-60 normalized
-damage curve to that first-rank cast time would inflate DPS. Until the runtime
-has an explicit per-level cast-time hook, each custom spell therefore inherits
-the CastingTimeIndex of the highest native rank at or below the configured
-runtime cap. This is deliberately conservative: low-level casts can be slower,
-but high-level damage can never be paired with an artificially short Rank-1
-cast solely because the custom row was cloned from the family root.
+Cast time now belongs to the profile-aware runtime. The custom Spell.dbc row
+therefore keeps the CastingTimeIndex of the native family root/first rank as a
+safe fallback. The server runtime interpolates the base cast time by character
+level and then lets AzerothCore apply its normal haste/spell modifiers. Keeping
+the DBC fallback at rank 1 also gives the client the correct native level-1
+value before the profile-aware tooltip helper runs.
 """
 
 from __future__ import annotations
@@ -96,13 +94,12 @@ def load_resolved(path: Path) -> tuple[int, dict[int, dict[str, Any]]]:
     return runtime_max_level, result
 
 
-def strongest_rank_at_cap(spec: dict[str, Any], runtime_max_level: int) -> int:
+def first_native_rank(spec: dict[str, Any]) -> int:
     ranks = spec.get("native_ranks")
     if not isinstance(ranks, list) or not ranks:
         raise FinalizeError(f"custom spell {spec.get('id')} has no native rank samples")
 
-    usable: list[tuple[int, int]] = []
-    all_ranks: list[tuple[int, int]] = []
+    ordered: list[tuple[int, int]] = []
     for rank in ranks:
         if not isinstance(rank, dict):
             raise FinalizeError(f"custom spell {spec.get('id')} has malformed native rank data")
@@ -113,18 +110,14 @@ def strongest_rank_at_cap(spec: dict[str, Any], runtime_max_level: int) -> int:
             raise FinalizeError(
                 f"custom spell {spec.get('id')} has malformed native rank data"
             ) from exc
-        all_ranks.append((level, spell_id))
-        if level <= runtime_max_level:
-            usable.append((level, spell_id))
+        ordered.append((level, spell_id))
 
-    selected = usable if usable else all_ranks
-    selected.sort()
-    return selected[-1][1]
+    ordered.sort()
+    return ordered[0][1]
 
 
 def finalize_spell_rows(
     path: Path,
-    runtime_max_level: int,
     specs: dict[int, dict[str, Any]],
 ) -> tuple[int, int]:
     fields, record_size, records, strings, trailing = read_dbc(path)
@@ -155,11 +148,11 @@ def finalize_spell_rows(
         if row_rank_changed:
             rank_text_changed += 1
 
-        source_rank_id = strongest_rank_at_cap(spec, runtime_max_level)
+        source_rank_id = first_native_rank(spec)
         source_rank = by_id.get(source_rank_id)
         if source_rank is None:
             raise FinalizeError(
-                f"custom spell {spell_id}: selected native rank {source_rank_id} is missing from Spell.dbc"
+                f"custom spell {spell_id}: native root rank {source_rank_id} is missing from Spell.dbc"
             )
         desired_cast_time_index = u32(source_rank, CASTING_TIME_INDEX_FIELD)
         if u32(row, CASTING_TIME_INDEX_FIELD) != desired_cast_time_index:
@@ -186,15 +179,15 @@ def finalize_spell_rows(
         ):
             raise FinalizeError(f"custom spell {spell_id} still has localized rank subtext")
 
-        source_rank_id = strongest_rank_at_cap(spec, runtime_max_level)
+        source_rank_id = first_native_rank(spec)
         source_rank = checked_by_id.get(source_rank_id)
         if source_rank is None:
             raise FinalizeError(
-                f"custom spell {spell_id}: validation source rank {source_rank_id} is missing"
+                f"custom spell {spell_id}: validation root rank {source_rank_id} is missing"
             )
         if u32(row, CASTING_TIME_INDEX_FIELD) != u32(source_rank, CASTING_TIME_INDEX_FIELD):
             raise FinalizeError(
-                f"custom spell {spell_id} does not use the conservative rank-{source_rank_id} cast time"
+                f"custom spell {spell_id} does not use native root/rank-1 fallback cast time"
             )
 
     return rank_text_changed, cast_time_changed
@@ -291,21 +284,17 @@ def main() -> None:
         raise SystemExit("Missing required DBC(s): " + ", ".join(missing))
 
     try:
-        runtime_max_level, specs = load_resolved(args.resolved.expanduser().resolve())
-        rank_changed, cast_time_changed = finalize_spell_rows(
-            spell_path,
-            runtime_max_level,
-            specs,
-        )
+        _runtime_max_level, specs = load_resolved(args.resolved.expanduser().resolve())
+        rank_changed, cast_time_changed = finalize_spell_rows(spell_path, specs)
         ability_changed = normalize_skillline_masks(ability_path, set(specs))
     except (DBCError, FinalizeError, KeyError, TypeError, ValueError) as exc:
         raise SystemExit(f"Normalized custom spell DBC finalization aborted: {exc}") from exc
 
     print(f"Normalized custom spell DBC rows finalized: {len(specs)} spells validated")
     print(f"  Spell.dbc rank-subtext rows changed: {rank_changed}")
-    print(f"  Spell.dbc conservative cast-time rows changed: {cast_time_changed}")
+    print(f"  Spell.dbc rank-1 fallback cast-time rows changed: {cast_time_changed}")
     print(f"  SkillLineAbility.dbc normalized association rows changed: {ability_changed}")
-    print(f"  cast-time source: highest native rank at/below level {runtime_max_level}")
+    print("  cast-time fallback: native family root/rank 1; runtime profile owns level scaling")
     print("  custom associations: every race / Adventurer class 10 only")
     print("  inherited skill auto-learn / superseded-rank semantics: cleared")
 
