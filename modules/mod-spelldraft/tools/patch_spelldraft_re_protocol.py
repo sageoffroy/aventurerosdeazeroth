@@ -14,6 +14,7 @@ rebuild or DBC regeneration is required.
 from __future__ import annotations
 
 import argparse
+import re
 import shutil
 from pathlib import Path
 
@@ -22,17 +23,17 @@ class PatchError(RuntimeError):
     pass
 
 
-SERVER_OLD = "RegisterPlayerEvent(19, OnWhisper)             -- PLAYER_EVENT_ON_WHISPER"
-SERVER_NEW = (
-    "RegisterPlayerEvent(18, OnWhisper)             -- PLAYER_EVENT_ON_CHAT (SDRE transport)\n"
-    "    RegisterPlayerEvent(19, OnWhisper)             -- PLAYER_EVENT_ON_WHISPER (legacy compatibility)"
-)
-
 CLIENT_RETOOLTIP_OLD = 'SendChatMessage("SDRE_SYNC", "WHISPER", nil, UnitName("player"))'
 CLIENT_RETOOLTIP_NEW = 'SendChatMessage("SDRE_SYNC", "SAY")'
 
 CLIENT_RESERVICES_OLD = 'SendChatMessage(msg, "WHISPER", nil, UnitName("player"))'
 CLIENT_RESERVICES_NEW = 'SendChatMessage(msg, "SAY")'
+
+SERVER_WHISPER_RE = re.compile(
+    r'^(?P<indent>\s*)RegisterPlayerEvent\(19,\s*OnWhisper\)'
+    r'(?P<tail>[^\n]*)$',
+    re.MULTILINE,
+)
 
 
 def backup_once(path: Path) -> None:
@@ -59,7 +60,30 @@ def replace_once(path: Path, old: str, new: str, label: str) -> bool:
 
 
 def patch_server(path: Path) -> bool:
-    changed = replace_once(path, SERVER_OLD, SERVER_NEW, "SDRE server listener")
+    if not path.is_file():
+        raise PatchError(f"missing SDRE server runtime: {path}")
+
+    text = path.read_text(encoding="utf-8")
+    if "RegisterPlayerEvent(18, OnWhisper)" in text:
+        changed = False
+    else:
+        matches = list(SERVER_WHISPER_RE.finditer(text))
+        if len(matches) != 1:
+            raise PatchError(
+                f"{path}: expected one RegisterPlayerEvent(19, OnWhisper) line, found {len(matches)}"
+            )
+
+        match = matches[0]
+        indent = match.group("indent")
+        replacement = (
+            f"{indent}RegisterPlayerEvent(18, OnWhisper)             -- PLAYER_EVENT_ON_CHAT (SDRE transport)\n"
+            f"{indent}RegisterPlayerEvent(19, OnWhisper)             -- PLAYER_EVENT_ON_WHISPER (legacy compatibility)"
+        )
+        backup_once(path)
+        text = text[: match.start()] + replacement + text[match.end() :]
+        path.write_text(text, encoding="utf-8")
+        changed = True
+
     checked = path.read_text(encoding="utf-8")
     if "RegisterPlayerEvent(18, OnWhisper)" not in checked:
         raise PatchError(f"{path}: SDRE PLAYER_EVENT_ON_CHAT listener missing")
@@ -85,14 +109,17 @@ def patch_client(retooltip: Path, reservices: Path) -> int:
     ):
         changed += 1
 
-    for path in (retooltip, reservices):
-        checked = path.read_text(encoding="utf-8")
-        if '"SDRE_' in checked and '"WHISPER"' in checked:
-            # RETooltip has a literal SDRE_* call; REServices routes through
-            # SendServer(msg), so the generic sender validation above is the
-            # authoritative check for that file.
-            if path == retooltip:
-                raise PatchError(f"{path}: SDRE self-whisper still present")
+    retooltip_text = retooltip.read_text(encoding="utf-8")
+    reservices_text = reservices.read_text(encoding="utf-8")
+
+    if CLIENT_RETOOLTIP_OLD in retooltip_text:
+        raise PatchError(f"{retooltip}: SDRE_SYNC self-whisper still present")
+    if CLIENT_RETOOLTIP_NEW not in retooltip_text:
+        raise PatchError(f"{retooltip}: SDRE_SYNC SAY transport missing")
+    if CLIENT_RESERVICES_OLD in reservices_text:
+        raise PatchError(f"{reservices}: SDRE SendServer self-whisper still present")
+    if CLIENT_RESERVICES_NEW not in reservices_text:
+        raise PatchError(f"{reservices}: SDRE SendServer SAY transport missing")
 
     return changed
 
@@ -126,6 +153,8 @@ def main() -> None:
         "  client addon:   "
         + (f"patched {client_changed} SDRE sender file(s)" if client_changed else "already patched")
     )
+    print("  RETooltip SDRE_SYNC: SAY")
+    print("  REServices SendServer: SAY")
     print("  legacy whisper listener retained for compatibility")
     print("  restart worldserver and fully restart WoW to test")
     print("  no C++ rebuild / DBC / MPQ regeneration required")
