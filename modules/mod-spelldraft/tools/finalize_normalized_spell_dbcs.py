@@ -8,6 +8,15 @@ rank is ever learned. Custom SkillLineAbility rows are also normalized to every
 playable race + Adventurer class 10 so native class masks cannot invalidate a
 201xxx spell after learning/relog.
 
+A normalized 201xxx spell must also be independent from the native skill-learning
+semantics of the cloned row. In particular, SkillLineAbility AcquireMethod=2
+means "learned together with the entire skill" in AzerothCore. Keeping it on a
+custom spell can make Player::learnSpell() call LearnDefaultSkill() and teach
+unrelated stock abilities from that skill line. Native SupercededBySpell and
+skill-rank gates are equally invalid for a rankless custom spell, so those
+fields are cleared while the SkillLine itself is preserved for spellbook/UI
+categorization.
+
 Cast time needs special handling too. WotLK rank families such as Frostbolt and
 Fireball can start with a shorter low-rank cast. Giving a level-60 normalized
 damage curve to that first-rank cast time would inflate DPS. Until the runtime
@@ -39,6 +48,11 @@ SKILLLINE_RACE_MASK_FIELD = 3
 SKILLLINE_CLASS_MASK_FIELD = 4
 SKILLLINE_EXCLUDE_RACE_FIELD = 5
 SKILLLINE_EXCLUDE_CLASS_FIELD = 6
+SKILLLINE_MIN_RANK_FIELD = 7
+SKILLLINE_SUPERCEDED_BY_SPELL_FIELD = 8
+SKILLLINE_ACQUIRE_METHOD_FIELD = 9
+SKILLLINE_TRIVIAL_RANK_HIGH_FIELD = 10
+SKILLLINE_TRIVIAL_RANK_LOW_FIELD = 11
 ADVENTURER_CLASS_MASK = 512
 
 
@@ -193,6 +207,21 @@ def normalize_skillline_masks(path: Path, ids: set[int]) -> int:
             f"{path}: unexpected SkillLineAbility.dbc layout {fields} fields / {record_size} bytes"
         )
 
+    desired = {
+        SKILLLINE_RACE_MASK_FIELD: 0,
+        SKILLLINE_CLASS_MASK_FIELD: ADVENTURER_CLASS_MASK,
+        SKILLLINE_EXCLUDE_RACE_FIELD: 0,
+        SKILLLINE_EXCLUDE_CLASS_FIELD: 0,
+        # 201xxx is an independent rankless spell. Never inherit the native
+        # skill's auto-learn/supersede semantics, otherwise learning one custom
+        # spell can cause AzerothCore to teach unrelated stock abilities.
+        SKILLLINE_MIN_RANK_FIELD: 0,
+        SKILLLINE_SUPERCEDED_BY_SPELL_FIELD: 0,
+        SKILLLINE_ACQUIRE_METHOD_FIELD: 0,
+        SKILLLINE_TRIVIAL_RANK_HIGH_FIELD: 0,
+        SKILLLINE_TRIVIAL_RANK_LOW_FIELD: 0,
+    }
+
     found: dict[int, int] = {spell_id: 0 for spell_id in ids}
     changed = 0
     for row in records:
@@ -201,12 +230,6 @@ def normalize_skillline_masks(path: Path, ids: set[int]) -> int:
             continue
         found[spell_id] += 1
         row_changed = False
-        desired = {
-            SKILLLINE_RACE_MASK_FIELD: 0,
-            SKILLLINE_CLASS_MASK_FIELD: ADVENTURER_CLASS_MASK,
-            SKILLLINE_EXCLUDE_RACE_FIELD: 0,
-            SKILLLINE_EXCLUDE_CLASS_FIELD: 0,
-        }
         for field, value in desired.items():
             if u32(row, field) != value:
                 set_u32(row, field, value)
@@ -228,6 +251,29 @@ def normalize_skillline_masks(path: Path, ids: set[int]) -> int:
         )
 
     write_dbc(path, fields, record_size, records, strings, trailing)
+
+    # Validate the persisted rows, including the fields that can trigger
+    # LearnDefaultSkill()/native rank progression in Player::learnSpell().
+    _, _, checked, _, _ = read_dbc(path)
+    checked_by_spell: dict[int, list[bytearray]] = {spell_id: [] for spell_id in ids}
+    for row in checked:
+        spell_id = u32(row, SKILLLINE_SPELL_FIELD)
+        if spell_id in checked_by_spell:
+            checked_by_spell[spell_id].append(row)
+
+    for spell_id, rows in checked_by_spell.items():
+        if len(rows) != 1:
+            raise FinalizeError(
+                f"custom spell {spell_id}: expected one persisted SkillLineAbility row, found {len(rows)}"
+            )
+        row = rows[0]
+        bad = [field for field, value in desired.items() if u32(row, field) != value]
+        if bad:
+            raise FinalizeError(
+                f"custom spell {spell_id}: SkillLineAbility normalization failed for field(s) "
+                + ", ".join(str(field) for field in bad)
+            )
+
     return changed
 
 
@@ -258,9 +304,10 @@ def main() -> None:
     print(f"Normalized custom spell DBC rows finalized: {len(specs)} spells validated")
     print(f"  Spell.dbc rank-subtext rows changed: {rank_changed}")
     print(f"  Spell.dbc conservative cast-time rows changed: {cast_time_changed}")
-    print(f"  SkillLineAbility.dbc class-mask rows changed: {ability_changed}")
+    print(f"  SkillLineAbility.dbc normalized association rows changed: {ability_changed}")
     print(f"  cast-time source: highest native rank at/below level {runtime_max_level}")
     print("  custom associations: every race / Adventurer class 10 only")
+    print("  inherited skill auto-learn / superseded-rank semantics: cleared")
 
 
 if __name__ == "__main__":
