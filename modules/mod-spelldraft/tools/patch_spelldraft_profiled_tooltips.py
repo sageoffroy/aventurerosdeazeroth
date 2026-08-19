@@ -4,10 +4,11 @@
 The semantic profile registry stores only native rank anchors. Lua interpolates
 those anchors at the current player level; no 1..60 tables are serialized.
 
-For damage_with_dot, the client receives direct damage, TOTAL DoT, duration and
-cast-time anchors. The historical ScaledSpellTooltips formatter can therefore
-render the same values that the server profile generator uses, while this tool
-adds a small post-hook for the cast-time line itself.
+For damage_with_dot, the client receives direct damage, TOTAL DoT, duration,
+tick interval and cast-time anchors. The historical ScaledSpellTooltips
+formatter therefore renders the same representable per-tick total that the
+server runtime uses, while this tool adds a small post-hook for the cast-time
+line itself.
 """
 
 from __future__ import annotations
@@ -185,16 +186,23 @@ def render_data_lua(data: dict[str, Any], dbc_rows: dict[int, bytearray]) -> tup
         "  })",
         "end",
         "",
-        "local function MakeDots(totalAnchors, durationAnchors)",
+        "local function MakeDots(totalAnchors, durationAnchors, tickAnchors)",
         "  local totals = BuildAmountPoints(totalAnchors)",
         "  return setmetatable({}, {",
         "    __index = function(cache, requestedLevel)",
         "      local level = ClampLevel(requestedLevel)",
         "      local minimum, maximum = InterpolateAmount(totals, level)",
         "      local durationMs = InterpolateScalar(durationAnchors, level, 1000)",
-        "      if minimum == nil or durationMs == nil then return nil end",
-        "      local total = minimum",
-        "      if maximum ~= minimum then total = RoundInt((minimum + maximum) / 2) end",
+        "      local tickMs = InterpolateScalar(tickAnchors, level, 1)",
+        "      if minimum == nil or durationMs == nil or not tickMs or tickMs <= 0 then return nil end",
+        "      local ticks = 1",
+        "      if durationMs > 0 then ticks = math.max(1, math.floor(durationMs / tickMs)) end",
+        "      local representedMin = RoundInt(minimum / ticks) * ticks",
+        "      local representedMax = RoundInt(maximum / ticks) * ticks",
+        "      local total = representedMin",
+        "      if representedMax ~= representedMin then",
+        "        total = RoundInt((representedMin + representedMax) / 2)",
+        "      end",
         "      local value = {total = total, duration = durationMs / 1000}",
         "      rawset(cache, requestedLevel, value)",
         "      return value",
@@ -264,9 +272,12 @@ def render_data_lua(data: dict[str, Any], dbc_rows: dict[int, bytearray]) -> tup
             raise TooltipError(f"custom spell {custom_id} missing from Spell.dbc")
         static_base = i32(custom_row, EFFECT_BASE_POINTS + direct_index)
         static_die = i32(custom_row, EFFECT_DIE_SIDES + direct_index)
+        legacy_profile = (
+            "spell_damage_with_dots" if profile == "damage_with_dot" else "spell_damage"
+        )
 
         lines.append(f"SpellDraftCustomScaling[{custom_id}] = {{")
-        lines.append(f"  profile = \"{profile}\",")
+        lines.append(f"  profile = \"{legacy_profile}\",")
         lines.append("  baseLevel = 1,")
         lines.append(f"  maxLevel = {max_level},")
         lines.append("  effects = {{")
@@ -279,15 +290,18 @@ def render_data_lua(data: dict[str, Any], dbc_rows: dict[int, bytearray]) -> tup
         lines.append("  },")
         lines.append("}")
         lines.append(f"SpellDraftDamageCurves[{custom_id}] = {{")
-        lines.append(f"  profile = \"{profile}\",")
+        lines.append(f"  profile = \"{legacy_profile}\",")
         lines.append(f"  maxLevel = {max_level},")
         lines.append(f"  ranges = MakeRanges({direct_text}),")
 
         if profile == "damage_with_dot":
             dot_text = amount_anchor_text(anchors, "dot_total")
             duration_text = scalar_anchor_text(anchors, "duration_ms")
-            if dot_text != "{}" and duration_text != "{}":
-                lines.append(f"  dots = MakeDots({dot_text}, {duration_text}),")
+            tick_text = scalar_anchor_text(anchors, "tick_ms")
+            if dot_text != "{}" and duration_text != "{}" and tick_text != "{}":
+                lines.append(
+                    f"  dots = MakeDots({dot_text}, {duration_text}, {tick_text}),"
+                )
         lines.append("}")
         curves += 1
 
@@ -432,7 +446,7 @@ def main() -> None:
     print("SpellDraft profile-aware tooltip scaling validated:")
     print(f"  aliases: {aliases}")
     print(f"  direct/damage+dot curves: {curves}")
-    print("  values: direct damage + DoT total + duration + cast time")
+    print("  values: direct damage + represented DoT total + duration + cast time")
     print("  storage: native anchors only; client interpolates current level")
     print(f"  status: {'patched' if changed else 'already valid'}")
     print("  legacy per-level Lua curves: not loaded")
