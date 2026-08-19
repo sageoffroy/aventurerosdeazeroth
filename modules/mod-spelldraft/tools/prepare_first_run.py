@@ -146,9 +146,9 @@ def main() -> None:
         str(normalized_scaling),
     )
 
-    # Strip inherited rank/skill semantics. The old conservative cast-time
-    # choice is intentionally overwritten by the profile stage immediately
-    # below; the custom DBC fallback becomes the native root/rank-1 cast again.
+    # Strip inherited rank/skill semantics and keep the native family root/rank
+    # 1 CastingTimeIndex as the DBC fallback. Level-aware cast time is owned by
+    # the profile runtime below.
     run(
         sys.executable,
         str(TOOLS_DIR / "finalize_normalized_spell_dbcs.py"),
@@ -203,7 +203,8 @@ def main() -> None:
     )
 
     # Remove reviewed false roots entirely, then strictly replace every selected
-    # native root with its rankless 201xxx card.
+    # native root with its rankless 201xxx card. The reviewed wrapper delegates
+    # the one-for-one replacement to apply_normalized_catalog.py.
     run(
         sys.executable,
         str(TOOLS_DIR / "apply_reviewed_normalized_catalog.py"),
