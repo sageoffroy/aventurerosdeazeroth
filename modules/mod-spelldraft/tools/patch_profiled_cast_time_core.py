@@ -6,15 +6,15 @@ PLAYERHOOK_ON_SPELL_CAST fires later when the cast is executed. Effect values
 can be replaced from that hook, but cast time cannot: the timer and
 SMSG_SPELL_START have already been committed.
 
-The project therefore uses one deliberately tiny core bridge. For a normalized
-201xxx spell, Spell.cpp asks mod-spelldraft for the interpolated BASE cast time,
-then runs AzerothCore's normal ranged-slot adjustment and ModSpellCastTime()
-processing on that base. Haste, spell modifiers and other normal cast-time
-mechanics therefore remain active. Non-custom and triggered-direct spells keep
-the stock path unchanged.
+The core side owns only an OPTIONAL resolver slot. mod-spelldraft registers its
+profile-aware resolver after loading the v2 scaling table. With the module
+disabled, the resolver remains null and the stock CalcCastTime() path is used;
+there is no core -> module link dependency.
 
-The custom and stock branches are mutually exclusive, so ModSpellCastTime() is
-never applied twice to the same cast.
+For a normalized spell the resolver returns an interpolated BASE cast time,
+then Spell.cpp runs AzerothCore's normal ranged-slot adjustment and
+ModSpellCastTime() processing once. Haste and ordinary spell modifiers remain
+normal game mechanics.
 """
 
 from __future__ import annotations
@@ -27,10 +27,17 @@ class PatchError(RuntimeError):
     pass
 
 
-DECLARATION = (
-    "int32 GetAventurerosCustomSpellCastTime("
-    "Player const* player, uint32 spellId, int32 fallbackCastTime);"
-)
+BRIDGE_DEFINITION = """using AventurerosCustomSpellCastTimeResolver = int32 (*)(Player const*, uint32, int32);
+
+namespace
+{
+AventurerosCustomSpellCastTimeResolver g_AventurerosCustomSpellCastTimeResolver = nullptr;
+}
+
+void SetAventurerosCustomSpellCastTimeResolver(AventurerosCustomSpellCastTimeResolver resolver)
+{
+    g_AventurerosCustomSpellCastTimeResolver = resolver;
+}"""
 
 STOCK_CAST_LINE = (
     "    m_casttime = HasTriggeredCastFlag(TRIGGERED_CAST_DIRECTLY) ? 0 : "
@@ -42,10 +49,13 @@ CAST_BLOCK = """    if (HasTriggeredCastFlag(TRIGGERED_CAST_DIRECTLY))
     else
     {
         int32 customBaseCastTime = -1;
-        if (Player* playerCaster = m_caster->ToPlayer())
+        if (g_AventurerosCustomSpellCastTimeResolver)
         {
-            customBaseCastTime = GetAventurerosCustomSpellCastTime(
-                playerCaster, m_spellInfo->Id, -1);
+            if (Player* playerCaster = m_caster->ToPlayer())
+            {
+                customBaseCastTime = g_AventurerosCustomSpellCastTimeResolver(
+                    playerCaster, m_spellInfo->Id, -1);
+            }
         }
 
         if (customBaseCastTime >= 0)
@@ -81,8 +91,8 @@ def patch_spell_cpp(root: Path) -> bool:
     text = replace_once(
         text,
         "extern pEffect SpellEffects[TOTAL_SPELL_EFFECTS];",
-        "extern pEffect SpellEffects[TOTAL_SPELL_EFFECTS];\n" + DECLARATION,
-        "Spell.cpp bridge declaration",
+        "extern pEffect SpellEffects[TOTAL_SPELL_EFFECTS];\n\n" + BRIDGE_DEFINITION,
+        "Spell.cpp optional resolver definition",
     )
 
     text = replace_once(
@@ -101,8 +111,8 @@ def patch_spell_cpp(root: Path) -> bool:
 def validate(root: Path) -> None:
     path = root / "src/server/game/Spells/Spell.cpp"
     text = path.read_text(encoding="utf-8")
-    if text.count(DECLARATION) != 1:
-        raise PatchError("Spell.cpp does not contain exactly one Aventureros bridge declaration")
+    if text.count(BRIDGE_DEFINITION) != 1:
+        raise PatchError("Spell.cpp does not contain exactly one optional resolver definition")
     if text.count(CAST_BLOCK) != 1:
         raise PatchError("Spell.cpp does not contain exactly one Aventureros cast-time block")
     if STOCK_CAST_LINE in text:
@@ -136,6 +146,7 @@ def main() -> None:
 
     print("Aventureros profiled cast-time core bridge validated:")
     print(f"  Spell.cpp: {'patched' if changed else 'already patched'}")
+    print("  core dependency: optional resolver; module-disabled build remains stock")
     print("  normalized cast base: interpolated by player level")
     print("  normal haste/spell cast modifiers: preserved exactly once")
     print("  triggered-direct/non-custom spells: stock path unchanged")
