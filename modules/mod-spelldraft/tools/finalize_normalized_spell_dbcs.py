@@ -6,16 +6,21 @@ first rank would keep its localized "Rank 1" / "Rango 1" subtext, causing the
 existing SpellDraft client to render Roman rank suffixes even though no native
 rank is ever learned. Custom SkillLineAbility rows are also normalized to every
 playable race + Adventurer class 10 so native class masks cannot invalidate a
-201xxx spell after learning/relog.
+custom spell after learning/relog.
 
-A normalized 201xxx spell must also be independent from the native skill-learning
-semantics of the cloned row. In particular, SkillLineAbility AcquireMethod=2
-means "learned together with the entire skill" in AzerothCore. Keeping it on a
-custom spell can make Player::learnSpell() call LearnDefaultSkill() and teach
-unrelated stock abilities from that skill line. Native SupercededBySpell and
-skill-rank gates are equally invalid for a rankless custom spell, so those
-fields are cleared while the SkillLine itself is preserved for spellbook/UI
-categorization.
+A normalized custom spell must also be independent from the native
+skill-learning semantics of the cloned row. In particular, SkillLineAbility
+AcquireMethod=2 means "learned together with the entire skill" in AzerothCore.
+Keeping it on a custom spell can make Player::learnSpell() call
+LearnDefaultSkill() and teach unrelated stock abilities from that skill line.
+Native SupercededBySpell and skill-rank gates are equally invalid for a rankless
+custom spell, so those fields are cleared while the SkillLine itself is
+preserved for spellbook/UI categorization.
+
+Aventureros also does not use the stock Shaman totem-item progression. Both the
+legacy Totem item fields and TotemCategory requirements are cleared from every
+custom spell so drafted totems work without class quests or hidden inventory
+prerequisites.
 
 Cast time now belongs to the profile-aware runtime. The custom Spell.dbc row
 therefore keeps the CastingTimeIndex of the native family root/first rank as a
@@ -37,6 +42,7 @@ from patch_adventurer_class_dbcs import DBCError, read_dbc, set_u32, u32, write_
 SPELL_FIELDS = 234
 SPELL_RECORD_SIZE = 936
 CASTING_TIME_INDEX_FIELD = 28
+TOTEM_REQUIREMENT_FIELDS = (50, 51, 222, 223)
 RANK_FIRST_FIELD = 153
 RANK_LAST_FIELD = 168
 RANK_FLAGS_FIELD = 169
@@ -119,7 +125,7 @@ def first_native_rank(spec: dict[str, Any]) -> int:
 def finalize_spell_rows(
     path: Path,
     specs: dict[int, dict[str, Any]],
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     fields, record_size, records, strings, trailing = read_dbc(path)
     if fields != SPELL_FIELDS or record_size != SPELL_RECORD_SIZE:
         raise FinalizeError(
@@ -130,12 +136,21 @@ def finalize_spell_rows(
     found: set[int] = set()
     rank_text_changed = 0
     cast_time_changed = 0
+    totem_requirement_changed = 0
 
     for spell_id, spec in specs.items():
         row = by_id.get(spell_id)
         if row is None:
             continue
         found.add(spell_id)
+
+        row_totem_changed = False
+        for field in TOTEM_REQUIREMENT_FIELDS:
+            if u32(row, field) != 0:
+                set_u32(row, field, 0)
+                row_totem_changed = True
+        if row_totem_changed:
+            totem_requirement_changed += 1
 
         row_rank_changed = False
         for field in range(RANK_FIRST_FIELD, RANK_LAST_FIELD + 1):
@@ -173,6 +188,10 @@ def finalize_spell_rows(
     checked_by_id = {u32(row, 0): row for row in checked}
     for spell_id, spec in specs.items():
         row = checked_by_id[spell_id]
+        if any(u32(row, field) != 0 for field in TOTEM_REQUIREMENT_FIELDS):
+            raise FinalizeError(
+                f"custom spell {spell_id} still has a totem item/category requirement"
+            )
         if any(
             u32(row, field) != 0
             for field in range(RANK_FIRST_FIELD, RANK_LAST_FIELD + 1)
@@ -190,7 +209,7 @@ def finalize_spell_rows(
                 f"custom spell {spell_id} does not use native root/rank-1 fallback cast time"
             )
 
-    return rank_text_changed, cast_time_changed
+    return rank_text_changed, cast_time_changed, totem_requirement_changed
 
 
 def normalize_skillline_masks(path: Path, ids: set[int]) -> int:
@@ -205,9 +224,9 @@ def normalize_skillline_masks(path: Path, ids: set[int]) -> int:
         SKILLLINE_CLASS_MASK_FIELD: ADVENTURER_CLASS_MASK,
         SKILLLINE_EXCLUDE_RACE_FIELD: 0,
         SKILLLINE_EXCLUDE_CLASS_FIELD: 0,
-        # 201xxx is an independent rankless spell. Never inherit the native
-        # skill's auto-learn/supersede semantics, otherwise learning one custom
-        # spell can cause AzerothCore to teach unrelated stock abilities.
+        # Custom spells are independent rankless spells. Never inherit the
+        # native skill's auto-learn/supersede semantics, otherwise learning one
+        # custom spell can cause AzerothCore to teach unrelated stock abilities.
         SKILLLINE_MIN_RANK_FIELD: 0,
         SKILLLINE_SUPERCEDED_BY_SPELL_FIELD: 0,
         SKILLLINE_ACQUIRE_METHOD_FIELD: 0,
@@ -285,7 +304,7 @@ def main() -> None:
 
     try:
         _runtime_max_level, specs = load_resolved(args.resolved.expanduser().resolve())
-        rank_changed, cast_time_changed = finalize_spell_rows(spell_path, specs)
+        rank_changed, cast_time_changed, totem_changed = finalize_spell_rows(spell_path, specs)
         ability_changed = normalize_skillline_masks(ability_path, set(specs))
     except (DBCError, FinalizeError, KeyError, TypeError, ValueError) as exc:
         raise SystemExit(f"Normalized custom spell DBC finalization aborted: {exc}") from exc
@@ -293,8 +312,10 @@ def main() -> None:
     print(f"Normalized custom spell DBC rows finalized: {len(specs)} spells validated")
     print(f"  Spell.dbc rank-subtext rows changed: {rank_changed}")
     print(f"  Spell.dbc rank-1 fallback cast-time rows changed: {cast_time_changed}")
+    print(f"  Spell.dbc totem-requirement rows changed: {totem_changed}")
     print(f"  SkillLineAbility.dbc normalized association rows changed: {ability_changed}")
     print("  cast-time fallback: native family root/rank 1; runtime profile owns level scaling")
+    print("  custom totem item/category requirements: cleared")
     print("  custom associations: every race / Adventurer class 10 only")
     print("  inherited skill auto-learn / superseded-rank semantics: cleared")
 
