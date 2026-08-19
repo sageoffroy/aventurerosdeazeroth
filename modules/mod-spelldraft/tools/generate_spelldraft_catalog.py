@@ -13,6 +13,7 @@ are attached to that card and learned automatically as the Adventurer levels.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import struct
 from collections import Counter, defaultdict
@@ -22,7 +23,10 @@ from pathlib import Path
 MAGIC = b"WDBC"
 HEADER = struct.Struct("<4sIIII")
 REPO = Path(__file__).resolve().parents[3]
+MODULE = Path(__file__).resolve().parents[1]
 DEFAULT_SPELL_RANKS_SQL = REPO / "data/sql/base/db_world/spell_ranks.sql"
+DEFAULT_CARD_DEPENDENCIES = MODULE / "card_dependencies.json"
+DEFAULT_RARITY_OVERRIDES = MODULE / "card_rarity_overrides.json"
 
 RELEVANT_SKILL_CATEGORIES = {6, 7, 8, 9, 11}
 
@@ -155,6 +159,129 @@ def parse_spell_data(path: Path) -> dict[int, CuratedSpell]:
     return result
 
 
+def load_rarity_overrides(path: Path) -> dict[int, int]:
+    if not path.is_file():
+        raise CatalogError(f"Card rarity override metadata not found: {path}")
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise CatalogError(
+            f"Invalid card rarity override metadata {path}: {exc}"
+        ) from exc
+
+    if data.get("schema_version") != 1:
+        raise CatalogError(
+            f"{path}: expected schema_version=1"
+        )
+
+    raw = data.get("rarity")
+    if not isinstance(raw, dict):
+        raise CatalogError(
+            f"{path}: rarity must be an object"
+        )
+
+    result: dict[int, int] = {}
+
+    for spell_id, rarity in raw.items():
+        try:
+            sid = int(spell_id)
+        except (TypeError, ValueError):
+            raise CatalogError(
+                f"{path}: invalid spell ID {spell_id!r}"
+            )
+
+        if not isinstance(rarity, int) or rarity < 0 or rarity > 4:
+            raise CatalogError(
+                f"{path}: spell {sid} rarity must be an integer from 0 to 4"
+            )
+
+        result[sid] = rarity
+
+    return result
+
+
+def load_card_dependencies(path: Path) -> dict[int, dict[str, list[str]]]:
+    if not path.is_file():
+        raise CatalogError(f"Card dependency metadata not found: {path}")
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise CatalogError(
+            f"Invalid card dependency metadata {path}: {exc}"
+        ) from exc
+
+    if data.get("schema_version") != 1:
+        raise CatalogError(
+            f"{path}: expected schema_version 1"
+        )
+
+    cards = data.get("cards")
+    if not isinstance(cards, dict):
+        raise CatalogError(
+            f"{path}: expected a cards object"
+        )
+
+    allowed_fields = {"grants", "requires", "synergy"}
+    result: dict[int, dict[str, list[str]]] = {}
+
+    for raw_spell_id, spec in cards.items():
+        try:
+            spell_id = int(raw_spell_id)
+        except (TypeError, ValueError) as exc:
+            raise CatalogError(
+                f"{path}: invalid spell ID {raw_spell_id!r}"
+            ) from exc
+
+        if not isinstance(spec, dict):
+            raise CatalogError(
+                f"{path}: card {spell_id} metadata must be an object"
+            )
+
+        unknown = set(spec) - allowed_fields
+        if unknown:
+            raise CatalogError(
+                f"{path}: card {spell_id} has unknown fields: "
+                + ", ".join(sorted(unknown))
+            )
+
+        normalized: dict[str, list[str]] = {}
+
+        for field in ("grants", "requires", "synergy"):
+            values = spec.get(field, [])
+
+            if not isinstance(values, list):
+                raise CatalogError(
+                    f"{path}: card {spell_id}.{field} must be a list"
+                )
+
+            cleaned: list[str] = []
+
+            for value in values:
+                if not isinstance(value, str):
+                    raise CatalogError(
+                        f"{path}: card {spell_id}.{field} values must be strings"
+                    )
+
+                value = value.strip()
+
+                if not value or not re.fullmatch(r"[a-z0-9_.:-]+", value):
+                    raise CatalogError(
+                        f"{path}: invalid capability tag {value!r} "
+                        f"for card {spell_id}.{field}"
+                    )
+
+                if value not in cleaned:
+                    cleaned.append(value)
+
+            normalized[field] = cleaned
+
+        result[spell_id] = normalized
+
+    return result
+
+
 def parse_spell_ranks(path: Path) -> tuple[dict[int, int], dict[int, list[tuple[int, int]]]]:
     """Return spell->root and root->[(rank, spell)] from AzerothCore base SQL."""
     if not path.is_file():
@@ -240,6 +367,14 @@ def lua_quote(value: str) -> str:
     )
 
 
+def lua_string_list(values: list[str]) -> str:
+    if not values:
+        return "{}"
+    return "{ " + ", ".join(
+        f'"{lua_quote(value)}"' for value in values
+    ) + " }"
+
+
 def build_catalog(
     curated: dict[int, CuratedSpell],
     spells: dict[int, dict[str, object]],
@@ -247,6 +382,8 @@ def build_catalog(
     talents: set[int],
     root_by_spell: dict[int, int],
     ranks_by_root: dict[int, list[tuple[int, int]]],
+    dependencies: dict[int, dict[str, list[str]]],
+    rarity_overrides: dict[int, int],
 ) -> list[dict[str, object]]:
     def rejection_reason(spell_id: int) -> str | None:
         authored = curated.get(spell_id)
@@ -335,12 +472,17 @@ def build_catalog(
         if not ranks:
             ranks = [{"id": root, "level": int(root_meta["spell_level"])}]
 
+        dependency = dependencies.get(root, {})
+
         catalog.append({
             "id": root,
-            "rarity": authored.rarity,
+            "rarity": rarity_overrides.get(root, authored.rarity),
             "classSet": CLASS_SET[authored.class_name],
             "minLevel": int(root_meta["spell_level"]),
             "name": authored.name,
+            "grants": list(dependency.get("grants", [])),
+            "requires": list(dependency.get("requires", [])),
+            "synergy": list(dependency.get("synergy", [])),
             "ranks": ranks,
         })
 
@@ -367,10 +509,18 @@ def write_catalog(path: Path, catalog: list[dict[str, object]]) -> None:
         )
         lines.append(
             '  { id = %d, rarity = %d, classSet = %d, minLevel = %d, '
-            'name = "%s", ranks = { %s } },'
+            'name = "%s", grants = %s, requires = %s, synergy = %s, '
+            'ranks = { %s } },'
             % (
-                entry["id"], entry["rarity"], entry["classSet"], entry["minLevel"],
-                lua_quote(str(entry["name"])), rank_text,
+                entry["id"],
+                entry["rarity"],
+                entry["classSet"],
+                entry["minLevel"],
+                lua_quote(str(entry["name"])),
+                lua_string_list(entry["grants"]),
+                lua_string_list(entry["requires"]),
+                lua_string_list(entry["synergy"]),
+                rank_text,
             )
         )
 
@@ -403,6 +553,16 @@ def main() -> None:
     parser.add_argument("--dbc-dir", required=True, type=Path)
     parser.add_argument("--spell-data", required=True, type=Path)
     parser.add_argument("--spell-ranks-sql", type=Path, default=DEFAULT_SPELL_RANKS_SQL)
+    parser.add_argument(
+        "--dependencies",
+        type=Path,
+        default=DEFAULT_CARD_DEPENDENCIES,
+    )
+    parser.add_argument(
+        "--rarity-overrides",
+        type=Path,
+        default=DEFAULT_RARITY_OVERRIDES,
+    )
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
 
@@ -425,6 +585,13 @@ def main() -> None:
         categories = skillline_categories(skill_dbc)
         categories_by_spell = spell_skill_categories(ability_dbc, categories)
         talents = talent_spells(talent_dbc)
+        dependencies = load_card_dependencies(
+            args.dependencies.expanduser().resolve()
+        )
+        rarity_overrides = load_rarity_overrides(
+            args.rarity_overrides.expanduser().resolve()
+        )
+
         catalog = build_catalog(
             curated,
             spells,
@@ -432,6 +599,8 @@ def main() -> None:
             talents,
             root_by_spell,
             ranks_by_root,
+            dependencies,
+            rarity_overrides,
         )
         write_catalog(args.output.expanduser().resolve(), catalog)
     except CatalogError as exc:

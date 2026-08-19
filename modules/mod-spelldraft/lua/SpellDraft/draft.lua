@@ -5,7 +5,15 @@
 -- WotLK DBCs plus the curated rarity/class metadata from the historical addon.
 
 local CLASS_ADVENTURER = 10
-local DRAFTS_PER_LEVEL = 10
+
+-- Starting draft economy.
+-- Aventureros begins with 3 chosen abilities.
+-- Aventureros starts with 3 rerolls.
+local STARTING_DRAFTS = 3
+local DRAFTS_PER_ADDITIONAL_LEVEL = 10
+local STARTING_REROLLS = 3
+local STARTING_BANS = 3
+
 local OFFER_SIZE = 3
 local LOW_LEVEL_POOL_FLOOR = 20
 
@@ -40,6 +48,11 @@ local draftedCache = {}
 local pendingOfferCache = {}
 local pendingOfferLoaded = {}
 
+-- Draft economy is persisted in CharacterDatabase, while these caches keep
+-- rapid UI actions authoritative during the current session.
+local draftResourceCache = {}
+local bannedSpellCache = {}
+
 math.randomseed(os.time())
 math.random()
 math.random()
@@ -54,7 +67,10 @@ local function IsAdventurer(player)
 end
 
 local function ExpectedDrafts(player)
-    return math.max(1, player:GetLevel() or 1) * DRAFTS_PER_LEVEL
+    local level = math.max(1, player:GetLevel() or 1)
+
+    return STARTING_DRAFTS
+        + math.max(0, level - 1) * DRAFTS_PER_ADDITIONAL_LEVEL
 end
 
 local function EligibilityLevel(player)
@@ -84,6 +100,86 @@ local function LoadDraftedState(guid, force)
 
     draftedCache[guid] = state
     return state
+end
+
+local function LoadDraftResources(guid, force)
+    if draftResourceCache[guid] and not force then
+        return draftResourceCache[guid]
+    end
+
+    local state = {
+        rerolls = STARTING_REROLLS,
+        bans = STARTING_BANS,
+    }
+
+    local query = CharDBQuery(
+        "SELECT rerolls_left, bans_left FROM spelldraft_draft_resources " ..
+        "WHERE player_guid = " .. guid
+    )
+
+    if query then
+        state.rerolls = query:GetUInt32(0)
+        state.bans = query:GetUInt32(1)
+    else
+        CharDBExecute(string.format(
+            "INSERT IGNORE INTO spelldraft_draft_resources " ..
+            "(player_guid, rerolls_left, bans_left) VALUES (%u, %u, %u)",
+            guid, STARTING_REROLLS, STARTING_BANS
+        ))
+    end
+
+    draftResourceCache[guid] = state
+    return state
+end
+
+local function SaveDraftResources(guid, state)
+    draftResourceCache[guid] = state
+
+    CharDBExecute(string.format(
+        "UPDATE spelldraft_draft_resources " ..
+        "SET rerolls_left = %u, bans_left = %u WHERE player_guid = %u",
+        state.rerolls, state.bans, guid
+    ))
+end
+
+local function LoadBannedState(guid, force)
+    if bannedSpellCache[guid] and not force then
+        return bannedSpellCache[guid]
+    end
+
+    local state = {
+        set = {},
+        list = {},
+    }
+
+    local query = CharDBQuery(
+        "SELECT spell_id FROM spelldraft_banned_spells " ..
+        "WHERE player_guid = " .. guid .. " ORDER BY spell_id"
+    )
+
+    if query then
+        repeat
+            local spellId = query:GetUInt32(0)
+
+            if spellId > 0 and not state.set[spellId] then
+                state.set[spellId] = true
+                table.insert(state.list, spellId)
+            end
+        until not query:NextRow()
+    end
+
+    bannedSpellCache[guid] = state
+    return state
+end
+
+local function BannedListString(state)
+    local values = {}
+
+    for _, spellId in ipairs(state.list or {}) do
+        table.insert(values, tostring(spellId))
+    end
+
+    return table.concat(values, ",")
 end
 
 local function DraftsRemaining(player)
@@ -160,6 +256,32 @@ local function PlayerHasAnyRank(player, entry)
     return false
 end
 
+local function BuildCapabilities(state)
+    local capabilities = {}
+
+    for spellId, _ in pairs(state.set or {}) do
+        local entry = POOL_BY_ID[spellId]
+
+        if entry then
+            for _, capability in ipairs(entry.grants or {}) do
+                capabilities[capability] = true
+            end
+        end
+    end
+
+    return capabilities
+end
+
+local function RequirementsMet(entry, capabilities)
+    for _, capability in ipairs(entry.requires or {}) do
+        if not capabilities[capability] then
+            return false
+        end
+    end
+
+    return true
+end
+
 local function RollRarity()
     local roll = math.random() * 100.0
     local cumulative = 0.0
@@ -192,18 +314,32 @@ local function PickCandidate(candidates, picked, preferredRarity)
     return source[math.random(1, #source)]
 end
 
-local function GenerateOffer(player)
-    local state = LoadDraftedState(player:GetGUIDLow(), false)
+local function BuildCandidates(player, excluded)
+    excluded = excluded or {}
+
+    local guid = player:GetGUIDLow()
+    local state = LoadDraftedState(guid, false)
+    local banned = LoadBannedState(guid, false)
+    local capabilities = BuildCapabilities(state)
     local queryLevel = EligibilityLevel(player)
     local candidates = {}
 
     for _, entry in ipairs(SPELL_POOL) do
         if entry.minLevel <= queryLevel
+            and RequirementsMet(entry, capabilities)
             and not state.set[entry.id]
+            and not banned.set[entry.id]
+            and not excluded[entry.id]
             and not PlayerHasAnyRank(player, entry) then
             table.insert(candidates, entry)
         end
     end
+
+    return candidates
+end
+
+local function GenerateOffer(player, excluded)
+    local candidates = BuildCandidates(player, excluded)
 
     local offer = {}
     local picked = {}
@@ -214,6 +350,7 @@ local function GenerateOffer(player)
         if not entry then
             break
         end
+
         picked[entry.id] = true
         table.insert(offer, entry.id)
     end
@@ -224,12 +361,36 @@ end
 local function SendCompatibilityState(player)
     -- The historical addon calls this state "prestiged". In Aventureros it
     -- simply means that native class-10 SpellDraft is enabled.
+    local guid = player:GetGUIDLow()
+    local resources = LoadDraftResources(guid, false)
+    local banned = LoadBannedState(guid, false)
+
     player:SendAddonMessage("SpellChoiceStatus", "prestiged", 0, player)
-    player:SendAddonMessage("SpellChoiceBansLeft", "0", 0, player)
-    player:SendAddonMessage("SpellChoiceBans", "", 0, player)
-    player:SendAddonMessage("SpellChoiceRerolls", "0", 0, player)
+    player:SendAddonMessage(
+        "SpellChoiceBansLeft",
+        tostring(resources.bans),
+        0,
+        player
+    )
+    player:SendAddonMessage(
+        "SpellChoiceBans",
+        BannedListString(banned),
+        0,
+        player
+    )
+    player:SendAddonMessage(
+        "SpellChoiceRerolls",
+        tostring(resources.rerolls),
+        0,
+        player
+    )
     player:SendAddonMessage("SpellChoiceUnlimitedReroll", "0", 0, player)
-    player:SendAddonMessage("SpellChoiceDrafts", tostring(DraftsRemaining(player)), 0, player)
+    player:SendAddonMessage(
+        "SpellChoiceDrafts",
+        tostring(DraftsRemaining(player)),
+        0,
+        player
+    )
 end
 
 local function SendOffer(player, offer)
@@ -253,10 +414,17 @@ local function OfferIsCurrent(player, offer)
         return false
     end
 
-    local state = LoadDraftedState(player:GetGUIDLow(), false)
+    local guid = player:GetGUIDLow()
+    local state = LoadDraftedState(guid, false)
+    local banned = LoadBannedState(guid, false)
+    local capabilities = BuildCapabilities(state)
+
     for _, spellId in ipairs(offer) do
         local entry = POOL_BY_ID[spellId]
-        if not entry or state.set[spellId] then
+        if not entry
+            or state.set[spellId]
+            or banned.set[spellId]
+            or not RequirementsMet(entry, capabilities) then
             return false
         end
     end
@@ -371,6 +539,13 @@ local function AcceptPick(player, spellId)
         return
     end
 
+    local capabilities = BuildCapabilities(state)
+    if not RequirementsMet(entry, capabilities) then
+        ClearPendingOffer(guid)
+        EnsureAndSendOffer(player)
+        return
+    end
+
     if DraftsRemaining(player) <= 0 then
         ClearPendingOffer(guid)
         player:SendAddonMessage("SpellChoiceClose", "", 0, player)
@@ -405,6 +580,146 @@ local function AcceptPick(player, spellId)
     end
 end
 
+local function HandleReroll(player)
+    local guid = player:GetGUIDLow()
+    local resources = LoadDraftResources(guid, false)
+
+    if resources.rerolls <= 0 then
+        player:SendAddonMessage(
+            "SpellChoiceRerollDenied",
+            "0",
+            0,
+            player
+        )
+        return
+    end
+
+    local oldOffer = LoadPendingOffer(guid, false)
+
+    if not oldOffer or #oldOffer == 0 then
+        EnsureAndSendOffer(player)
+        return
+    end
+
+    local excluded = {}
+    for _, spellId in ipairs(oldOffer) do
+        excluded[spellId] = true
+    end
+
+    local newOffer = GenerateOffer(player, excluded)
+
+    -- With a very small late-game pool, prefer a valid reroll over becoming
+    -- stuck merely because all remaining candidates were in the previous hand.
+    if #newOffer == 0 then
+        newOffer = GenerateOffer(player)
+    end
+
+    if #newOffer == 0 then
+        EnsureAndSendOffer(player)
+        return
+    end
+
+    resources.rerolls = resources.rerolls - 1
+    SaveDraftResources(guid, resources)
+
+    SavePendingOffer(player, newOffer)
+    SendCompatibilityState(player)
+    SendOffer(player, newOffer)
+end
+
+local function HandleBan(player, spellId)
+    local guid = player:GetGUIDLow()
+    local resources = LoadDraftResources(guid, false)
+    local banned = LoadBannedState(guid, false)
+    local offer = LoadPendingOffer(guid, false)
+
+    if resources.bans <= 0
+        or not OfferContains(offer, spellId)
+        or banned.set[spellId] then
+        player:SendAddonMessage(
+            "SpellChoiceBanDenied",
+            "0",
+            0,
+            player
+        )
+        return
+    end
+
+    banned.set[spellId] = true
+    table.insert(banned.list, spellId)
+
+    CharDBExecute(string.format(
+        "INSERT IGNORE INTO spelldraft_banned_spells " ..
+        "(player_guid, spell_id) VALUES (%u, %u)",
+        guid, spellId
+    ))
+
+    resources.bans = resources.bans - 1
+    SaveDraftResources(guid, resources)
+
+    -- Update counters/list first. SpellChoiceBanAccepted makes the historical
+    -- addon immediately request SC_REPLACE_BANNED.
+    SendCompatibilityState(player)
+
+    player:SendAddonMessage(
+        "SpellChoiceBanAccepted",
+        tostring(spellId),
+        0,
+        player
+    )
+end
+
+local function HandleReplaceBanned(player)
+    local guid = player:GetGUIDLow()
+    local offer = LoadPendingOffer(guid, false)
+
+    if not offer or #offer == 0 then
+        EnsureAndSendOffer(player)
+        return
+    end
+
+    local banned = LoadBannedState(guid, false)
+    local excluded = {}
+
+    -- Cards that were not banned stay in the same offer.
+    for _, spellId in ipairs(offer) do
+        if not banned.set[spellId] then
+            excluded[spellId] = true
+        end
+    end
+
+    local candidates = BuildCandidates(player, excluded)
+    local picked = {}
+    local replacement = {}
+
+    for _, spellId in ipairs(offer) do
+        if banned.set[spellId] then
+            local entry = PickCandidate(
+                candidates,
+                picked,
+                RollRarity()
+            )
+
+            if entry then
+                picked[entry.id] = true
+                table.insert(replacement, entry.id)
+            end
+        else
+            table.insert(replacement, spellId)
+        end
+    end
+
+    if #replacement == 0 then
+        ClearPendingOffer(guid)
+        EnsureAndSendOffer(player)
+        return
+    end
+
+    SavePendingOffer(player, replacement)
+    SendCompatibilityState(player)
+    SendOffer(player, replacement)
+end
+
 local function OnProtocolWhisper(_, player, msg, _, _, receiver)
     if not IsAdventurer(player) or not msg then
         return
@@ -432,15 +747,19 @@ local function OnProtocolWhisper(_, player, msg, _, _, receiver)
         return false
     end
 
-    -- Rerolls and bans are intentionally postponed until the real base pool is
-    -- proven. Keep the old addon stable by explicitly denying those requests.
     if msg == "SC_REROLL" then
-        player:SendAddonMessage("SpellChoiceRerollDenied", "0", 0, player)
+        HandleReroll(player)
         return false
     end
 
-    if msg:match("^SC_BAN:") then
-        player:SendAddonMessage("SpellChoiceBanDenied", "0", 0, player)
+    local bannedSpellId = msg:match("^SC_BAN:(%d+)$")
+    if bannedSpellId then
+        HandleBan(player, tonumber(bannedSpellId))
+        return false
+    end
+
+    if msg == "SC_REPLACE_BANNED" then
+        HandleReplaceBanned(player)
         return false
     end
 end
@@ -452,6 +771,8 @@ local function OnLogin(_, player)
 
     local guid = player:GetGUIDLow()
     LoadDraftedState(guid, true)
+    LoadDraftResources(guid, true)
+    LoadBannedState(guid, true)
     LoadPendingOffer(guid, true)
     RestoreAndUpgradeDraftedSpells(player)
 end
@@ -465,6 +786,8 @@ local function OnLogout(_, player)
     draftedCache[guid] = nil
     pendingOfferCache[guid] = nil
     pendingOfferLoaded[guid] = nil
+    draftResourceCache[guid] = nil
+    bannedSpellCache[guid] = nil
 end
 
 local function OnLevelChanged(_, player)
@@ -491,5 +814,6 @@ RegisterPlayerEvent(13, OnLevelChanged)    -- PLAYER_EVENT_ON_LEVEL_CHANGE
 
 print(
     "[Aventureros de Azeroth] Real SpellDraft engine loaded: " ..
-    tostring(#SPELL_POOL) .. " root abilities, 10 drafts/level."
+    tostring(#SPELL_POOL) ..
+    " root abilities, 3 starting drafts, 3 rerolls, 3 bans."
 )

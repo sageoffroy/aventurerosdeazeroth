@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "cards": {
+    "1120": {
+      "grants": [
+        "resource.soul_shard"
+      ]
+    },
+    "6353": {
+      "requires": [
+        "resource.soul_shard"
+      ]
+    },
+    "1784": {
+      "grants": [
+        "state.stealth"
+      ]
+    },
+    "8676": {
+      "requires": [
+        "state.stealth"
+      ]
+    },
+    "768": {
+      "grants": [
+        "form.cat"
+      ]
+    },
+    "5221": {
+      "requires": [
+        "form.cat"
+      ]
+    },
+    "5487": {
+      "grants": [
+        "form.bear"
+      ]
+    },
+    "71": {
+      "grants": [
+        "stance.defensive"
+      ]
+    },
+    "348": {
+      "grants": [
+        "effect.immolate"
+      ]
+    },
+    "29722": {
+      "synergy": [
+        "effect.immolate"
+      ]
+    }
+  }
+}

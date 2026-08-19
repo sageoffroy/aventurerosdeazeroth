@@ -24,7 +24,9 @@ from pathlib import Path
 
 CATALOG_LINE_RE = re.compile(
     r'^\s*\{ id = (\d+), rarity = (-?\d+), classSet = (\d+), minLevel = (\d+), '
-    r'name = "((?:\\.|[^"])*)", ranks = \{.*\} \},\s*$'
+    r'name = "((?:\\.|[^"])*)", '
+    r'((?:grants = \{.*?\}, requires = \{.*?\}, synergy = \{.*?\}, )?)'
+    r'ranks = \{.*\} \},\s*$'
 )
 
 
@@ -115,10 +117,19 @@ def replace_catalog(path: Path, replacements: dict[int, dict[str, object]]) -> t
         else:
             escaped_name = lua_quote(name)
 
+        dependency_fields = match.group(6) or ""
+
         output.append(
             '  { id = %d, rarity = %d, classSet = %d, minLevel = 1, '
-            'name = "%s", ranks = { { id = %d, level = 1 } } },'
-            % (custom_id, rarity, class_set, escaped_name, custom_id)
+            'name = "%s", %sranks = { { id = %d, level = 1 } } },'
+            % (
+                custom_id,
+                rarity,
+                class_set,
+                escaped_name,
+                dependency_fields,
+                custom_id,
+            )
         )
 
     missing = [root for root, count in found.items() if count == 0]
