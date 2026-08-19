@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Install compact profile-aware client scaling for normalized 201xxx spells.
 
-The semantic profile registry stores only native rank anchors. Lua interpolates
-those anchors at the current player level; no 1..60 tables are serialized.
+The client receives native rank anchors, not serialized 1..60 tables. Damage,
+cast time and duration are interpolated locally with the same rules used by the
+server generator.
 
-For damage_with_dot, the client receives direct damage, TOTAL DoT, duration,
-tick interval and cast-time anchors. The historical ScaledSpellTooltips
-formatter therefore renders the same representable per-tick total that the
-server runtime uses, while this tool adds a small post-hook for the cast-time
-line itself.
+Periodic damage is interpolated PER TICK. The visible DoT total is derived as
+integer tick amount * tick count, exactly matching what AzerothCore executes.
+Native dot_total values remain in the semantic registry for validation, but are
+not independently interpolated by the client.
 """
 
 from __future__ import annotations
@@ -22,8 +22,6 @@ from typing import Any
 
 from patch_adventurer_class_dbcs import read_dbc, u32
 from patch_spelldraft_scaled_tooltips import render_compat_lua
-
-MODULE = Path(__file__).resolve().parent.parent
 
 DATA_FILENAME = "AventurerosSpellScaling.lua"
 COMPAT_FILENAME = "AventurerosScaledTooltipCompat.lua"
@@ -53,6 +51,8 @@ def load_profiles(path: Path) -> dict[str, Any]:
         raise TooltipError(f"invalid profile registry {path}: {exc}") from exc
     if not isinstance(data, dict) or int(data.get("version", 0)) != 2:
         raise TooltipError(f"{path}: expected profile registry version 2")
+    if data.get("periodic_model") != "per_tick_integer_interpolation":
+        raise TooltipError(f"{path}: unexpected or missing periodic_model")
     spells = data.get("spells")
     if not isinstance(spells, list) or not spells:
         raise TooltipError(f"{path}: expected a non-empty spells list")
@@ -71,7 +71,8 @@ def amount_anchor_text(anchors: list[dict[str, Any]], field: str) -> str:
         if not isinstance(amount, dict):
             continue
         values.append(
-            "{%d, %d, %d}" % (
+            "{%d, %d, %d}"
+            % (
                 int(anchor["level"]),
                 int(amount["min"]),
                 int(amount["max"]),
@@ -89,7 +90,10 @@ def scalar_anchor_text(anchors: list[dict[str, Any]], field: str) -> str:
     return "{" + ", ".join(values) + "}"
 
 
-def render_data_lua(data: dict[str, Any], dbc_rows: dict[int, bytearray]) -> tuple[str, int, int]:
+def render_data_lua(
+    data: dict[str, Any],
+    dbc_rows: dict[int, bytearray],
+) -> tuple[str, int, int]:
     max_level = int(data["runtime_max_level"])
     low_level_offset = float(data.get("low_level_offset", 0.0))
     spells = data["spells"]
@@ -186,23 +190,21 @@ def render_data_lua(data: dict[str, Any], dbc_rows: dict[int, bytearray]) -> tup
         "  })",
         "end",
         "",
-        "local function MakeDots(totalAnchors, durationAnchors, tickAnchors)",
-        "  local totals = BuildAmountPoints(totalAnchors)",
+        "local function MakeDots(tickAmountAnchors, durationAnchors, tickMsAnchors)",
+        "  local tickAmounts = BuildAmountPoints(tickAmountAnchors)",
         "  return setmetatable({}, {",
         "    __index = function(cache, requestedLevel)",
         "      local level = ClampLevel(requestedLevel)",
-        "      local minimum, maximum = InterpolateAmount(totals, level)",
+        "      local tickMin, tickMax = InterpolateAmount(tickAmounts, level)",
         "      local durationMs = InterpolateScalar(durationAnchors, level, 1000)",
-        "      local tickMs = InterpolateScalar(tickAnchors, level, 1)",
-        "      if minimum == nil or durationMs == nil or not tickMs or tickMs <= 0 then return nil end",
+        "      local tickMs = InterpolateScalar(tickMsAnchors, level, 1)",
+        "      if tickMin == nil or durationMs == nil or not tickMs or tickMs <= 0 then return nil end",
         "      local ticks = 1",
         "      if durationMs > 0 then ticks = math.max(1, math.floor(durationMs / tickMs)) end",
-        "      local representedMin = RoundInt(minimum / ticks) * ticks",
-        "      local representedMax = RoundInt(maximum / ticks) * ticks",
-        "      local total = representedMin",
-        "      if representedMax ~= representedMin then",
-        "        total = RoundInt((representedMin + representedMax) / 2)",
-        "      end",
+        "      local totalMin = tickMin * ticks",
+        "      local totalMax = tickMax * ticks",
+        "      local total = totalMin",
+        "      if totalMax ~= totalMin then total = RoundInt((totalMin + totalMax) / 2) end",
         "      local value = {total = total, duration = durationMs / 1000}",
         "      rawset(cache, requestedLevel, value)",
         "      return value",
@@ -233,19 +235,21 @@ def render_data_lua(data: dict[str, Any], dbc_rows: dict[int, bytearray]) -> tup
         lines.append(f"SpellDraftCustomSpellAliases[{custom_id}] = {source_id}")
         aliases += 1
 
-    lines.extend([
-        "",
-        "function SpellDraft.GetCustomSpellSourceID(spellID)",
-        "  return SpellDraftCustomSpellAliases[tonumber(spellID)]",
-        "end",
-        "",
-        "function SpellDraft.GetProfiledCastTime(spellID, level)",
-        "  local values = SpellDraftProfiledCastTimes[tonumber(spellID)]",
-        "  if not values then return nil end",
-        "  return values[ClampLevel(level)]",
-        "end",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "function SpellDraft.GetCustomSpellSourceID(spellID)",
+            "  return SpellDraftCustomSpellAliases[tonumber(spellID)]",
+            "end",
+            "",
+            "function SpellDraft.GetProfiledCastTime(spellID, level)",
+            "  local values = SpellDraftProfiledCastTimes[tonumber(spellID)]",
+            "  if not values then return nil end",
+            "  return values[ClampLevel(level)]",
+            "end",
+            "",
+        ]
+    )
 
     for spell in spells:
         if not isinstance(spell, dict):
@@ -257,7 +261,9 @@ def render_data_lua(data: dict[str, Any], dbc_rows: dict[int, bytearray]) -> tup
             continue
 
         cast_text = scalar_anchor_text(anchors, "cast_ms")
-        lines.append(f"SpellDraftProfiledCastTimes[{custom_id}] = MakeScalar({cast_text}, 100)")
+        lines.append(
+            f"SpellDraftProfiledCastTimes[{custom_id}] = MakeScalar({cast_text}, 100)"
+        )
 
         direct_index = spell.get("direct_effect_index")
         if direct_index is None or profile not in {"direct_damage", "damage_with_dot"}:
@@ -295,12 +301,16 @@ def render_data_lua(data: dict[str, Any], dbc_rows: dict[int, bytearray]) -> tup
         lines.append(f"  ranges = MakeRanges({direct_text}),")
 
         if profile == "damage_with_dot":
-            dot_text = amount_anchor_text(anchors, "dot_total")
+            dot_tick_text = amount_anchor_text(anchors, "dot_tick")
             duration_text = scalar_anchor_text(anchors, "duration_ms")
-            tick_text = scalar_anchor_text(anchors, "tick_ms")
-            if dot_text != "{}" and duration_text != "{}" and tick_text != "{}":
+            tick_ms_text = scalar_anchor_text(anchors, "tick_ms")
+            if (
+                dot_tick_text != "{}"
+                and duration_text != "{}"
+                and tick_ms_text != "{}"
+            ):
                 lines.append(
-                    f"  dots = MakeDots({dot_text}, {duration_text}, {tick_text}),"
+                    f"  dots = MakeDots({dot_tick_text}, {duration_text}, {tick_ms_text}),"
                 )
         lines.append("}")
         curves += 1
@@ -369,10 +379,16 @@ def patch_toc(path: Path) -> bool:
     if not path.is_file():
         raise TooltipError(f"SpellDraft TOC not found: {path}")
     original = path.read_text(encoding="utf-8")
-    removable = LEGACY_FILENAMES | {DATA_FILENAME, COMPAT_FILENAME, PROFILE_TOOLTIP_FILENAME}
+    removable = LEGACY_FILENAMES | {
+        DATA_FILENAME,
+        COMPAT_FILENAME,
+        PROFILE_TOOLTIP_FILENAME,
+    }
     lines = [line for line in original.splitlines() if line.strip() not in removable]
     try:
-        tooltip_index = next(i for i, line in enumerate(lines) if line.strip() == TOOLTIP_FILENAME)
+        tooltip_index = next(
+            i for i, line in enumerate(lines) if line.strip() == TOOLTIP_FILENAME
+        )
     except StopIteration as exc:
         raise TooltipError(f"{path}: {TOOLTIP_FILENAME} entry not found") from exc
 
@@ -390,8 +406,16 @@ def patch_toc(path: Path) -> bool:
 
 
 def validate(addon_dir: Path, aliases: int, curves: int) -> None:
-    toc = [line.strip() for line in (addon_dir / "SpellDraft.toc").read_text(encoding="utf-8").splitlines()]
-    for filename in (DATA_FILENAME, TOOLTIP_FILENAME, COMPAT_FILENAME, PROFILE_TOOLTIP_FILENAME):
+    toc = [
+        line.strip()
+        for line in (addon_dir / "SpellDraft.toc").read_text(encoding="utf-8").splitlines()
+    ]
+    for filename in (
+        DATA_FILENAME,
+        TOOLTIP_FILENAME,
+        COMPAT_FILENAME,
+        PROFILE_TOOLTIP_FILENAME,
+    ):
         if toc.count(filename) != 1:
             raise TooltipError(f"expected exactly one {filename} in SpellDraft.toc")
     for legacy in LEGACY_FILENAMES:
@@ -446,7 +470,9 @@ def main() -> None:
     print("SpellDraft profile-aware tooltip scaling validated:")
     print(f"  aliases: {aliases}")
     print(f"  direct/damage+dot curves: {curves}")
-    print("  values: direct damage + represented DoT total + duration + cast time")
+    print("  periodic model: same integer per-tick interpolation as server runtime")
+    print("  visible DoT total: runtime tick amount x runtime tick count")
+    print("  values: direct damage + DoT total + duration + cast time")
     print("  storage: native anchors only; client interpolates current level")
     print(f"  status: {'patched' if changed else 'already valid'}")
     print("  legacy per-level Lua curves: not loaded")
