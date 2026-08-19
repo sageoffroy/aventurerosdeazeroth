@@ -83,7 +83,8 @@ constexpr uint32 TAUREN_SPELLS[] = { 20549, 20550, 20552, 20551 };
 constexpr uint32 GNOME_SPELLS[] = { 20589, 20591, 20593, 20592 };
 constexpr uint32 TROLL_SPELLS[] = { 26297, 20555, 20557, 20558, 26290, 58943 };
 constexpr uint32 BLOOD_ELF_SPELLS[] = { 28730, 20554, 822 };
-constexpr uint32 DRAENEI_SPELLS[] = { 59547, 28878, 28875, 28877 };
+// 28877 teaches racial skill 756, which is not valid for Draenei (race 11).
+constexpr uint32 DRAENEI_SPELLS[] = { 59547, 28878, 28875 };
 
 bool IsBotSession(Player const* player)
 {
