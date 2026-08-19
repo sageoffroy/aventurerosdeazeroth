@@ -7,7 +7,7 @@
     "max_first_rank_level": 20,
     "exclude_classes": ["DEATHKNIGHT"],
     "include_talents": false,
-    "description": "Normalize every currently draftable non-talent class ability whose first rank is learned at level 20 or earlier. The native rank family is kept only as scaling source data and is replaced by one 201xxx card."
+    "description": "Normalize every currently draftable non-talent class ability whose first rank is learned at level 20 or earlier. The native rank family is kept as profile/anchor source data and is replaced by one 201xxx card."
   },
   "pinned": [
     {
@@ -51,14 +51,21 @@
     }
   ],
   "scaling": {
-    "strategy": "per_effect_rank_anchors",
+    "strategy": "profiled_native_rank_anchors",
     "interpolation": "piecewise_linear",
     "duplicate_level_rule": "strongest",
     "below_first_rank": "level_offset_ratio",
     "low_level_offset": 2.0,
     "random_range": "runtime_roll",
-    "duration": "rank_step",
-    "cast_time": "highest_native_rank_at_runtime_cap",
-    "notes": "Each varying Spell.dbc effect is normalized independently. Native rank values become anchors; the custom spell has no ranks. Mechanics, targets, visuals, coefficients, costs and non-varying effect values remain inherited from the first native rank. Anchors above the runtime level cap remain source/reference data; runtime output stops at level 60. Until a per-level cast-time hook is added, the custom spell uses the cast-time index of the highest native rank at or below the runtime cap so high-rank damage can never inherit an artificially short Rank-1 cast."
+    "integer_amounts": "nearest_integer",
+    "duration": "piecewise_linear_nearest_1s",
+    "cast_time": "piecewise_linear_nearest_0.1s",
+    "damage_with_dot": [
+      "direct_min_max",
+      "dot_total",
+      "duration",
+      "cast_time"
+    ],
+    "notes": "Native WoW ranks are semantic anchors. Specialized profiles keep fields with their real meaning instead of treating every effect as an anonymous min/max pair. damage_with_dot stores direct damage, total periodic damage, duration and cast time; missing player levels are interpolated. The runtime converts total DoT back to the per-tick base value AzerothCore expects. Generic effect curves remain as a fallback for profiles not specialized yet. Spell power, crit, haste, buffs/debuffs and target modifiers remain normal AzerothCore mechanics and are not baked into the base level curves."
   }
 }
