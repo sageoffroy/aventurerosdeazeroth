@@ -13,7 +13,8 @@ processing on that base. Haste, spell modifiers and other normal cast-time
 mechanics therefore remain active. Non-custom and triggered-direct spells keep
 the stock path unchanged.
 
-The patch is idempotent and keeps all profile data/selection inside the module.
+The custom and stock branches are mutually exclusive, so ModSpellCastTime() is
+never applied twice to the same cast.
 """
 
 from __future__ import annotations
@@ -31,21 +32,32 @@ DECLARATION = (
     "Player const* player, uint32 spellId, int32 fallbackCastTime);"
 )
 
-CALL_BLOCK = """    if (!HasTriggeredCastFlag(TRIGGERED_CAST_DIRECTLY))
+STOCK_CAST_LINE = (
+    "    m_casttime = HasTriggeredCastFlag(TRIGGERED_CAST_DIRECTLY) ? 0 : "
+    "m_spellInfo->CalcCastTime(m_caster, this);"
+)
+
+CAST_BLOCK = """    if (HasTriggeredCastFlag(TRIGGERED_CAST_DIRECTLY))
+        m_casttime = 0;
+    else
     {
+        int32 customBaseCastTime = -1;
         if (Player* playerCaster = m_caster->ToPlayer())
         {
-            int32 customBaseCastTime = GetAventurerosCustomSpellCastTime(
+            customBaseCastTime = GetAventurerosCustomSpellCastTime(
                 playerCaster, m_spellInfo->Id, -1);
-            if (customBaseCastTime >= 0)
-            {
-                m_casttime = customBaseCastTime;
-                if (m_spellInfo->HasAttribute(SPELL_ATTR0_USES_RANGED_SLOT)
-                    && !m_spellInfo->IsAutoRepeatRangedSpell())
-                    m_casttime += 500;
-                m_caster->ModSpellCastTime(m_spellInfo, m_casttime, this);
-            }
         }
+
+        if (customBaseCastTime >= 0)
+        {
+            m_casttime = customBaseCastTime;
+            if (m_spellInfo->HasAttribute(SPELL_ATTR0_USES_RANGED_SLOT)
+                && !m_spellInfo->IsAutoRepeatRangedSpell())
+                m_casttime += 500;
+            m_caster->ModSpellCastTime(m_spellInfo, m_casttime, this);
+        }
+        else
+            m_casttime = m_spellInfo->CalcCastTime(m_caster, this);
     }"""
 
 
@@ -73,15 +85,11 @@ def patch_spell_cpp(root: Path) -> bool:
         "Spell.cpp bridge declaration",
     )
 
-    cast_line = (
-        "    m_casttime = HasTriggeredCastFlag(TRIGGERED_CAST_DIRECTLY) ? 0 : "
-        "m_spellInfo->CalcCastTime(m_caster, this);"
-    )
     text = replace_once(
         text,
-        cast_line,
-        cast_line + "\n" + CALL_BLOCK,
-        "Spell.cpp cast-time bridge",
+        STOCK_CAST_LINE,
+        CAST_BLOCK,
+        "Spell.cpp cast-time calculation",
     )
 
     if text != original:
@@ -95,10 +103,12 @@ def validate(root: Path) -> None:
     text = path.read_text(encoding="utf-8")
     if text.count(DECLARATION) != 1:
         raise PatchError("Spell.cpp does not contain exactly one Aventureros bridge declaration")
-    if text.count(CALL_BLOCK) != 1:
-        raise PatchError("Spell.cpp does not contain exactly one Aventureros cast-time bridge call")
+    if text.count(CAST_BLOCK) != 1:
+        raise PatchError("Spell.cpp does not contain exactly one Aventureros cast-time block")
+    if STOCK_CAST_LINE in text:
+        raise PatchError("stock one-line cast calculation survived next to the profiled branch")
 
-    call_pos = text.index(CALL_BLOCK)
+    call_pos = text.index(CAST_BLOCK)
     cheat_pos = text.find("GetCommandStatus(CHEAT_CASTTIME)", call_pos)
     timer_pos = text.find("ReSetTimer();", call_pos)
     if cheat_pos < 0 or timer_pos < 0 or not call_pos < cheat_pos < timer_pos:
@@ -127,7 +137,7 @@ def main() -> None:
     print("Aventureros profiled cast-time core bridge validated:")
     print(f"  Spell.cpp: {'patched' if changed else 'already patched'}")
     print("  normalized cast base: interpolated by player level")
-    print("  normal haste/spell cast modifiers: preserved")
+    print("  normal haste/spell cast modifiers: preserved exactly once")
     print("  triggered-direct/non-custom spells: stock path unchanged")
     print("  hook point: before cheat handling, movement checks and ReSetTimer()")
 
