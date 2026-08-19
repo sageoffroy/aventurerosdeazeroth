@@ -1,25 +1,20 @@
 #!/usr/bin/env python3
 """Generate profile-aware per-level runtime data from native WoW rank anchors.
 
-The first normalized-spell implementation treated every scalable numeric effect
-as an anonymous min/max pair. That is sufficient for direct damage but loses
-important spell semantics: a periodic damage effect is a per-tick amount while
-its tooltip normally talks about TOTAL damage over a duration, and cast time is
-not an effect at all.
+Normalized 201xxx spells have no native ranks at runtime, so their base values
+must be reconstructed from the original rank family. This generator keeps the
+meaning of those values explicit instead of treating every numeric effect as an
+anonymous min/max pair.
 
-This stage runs after generate_normalized_spells.py. It keeps the existing
-201xxx IDs/DBC clones, but rebuilds their runtime scaling from the native rank
-family using explicit profile fields.
+For damage_with_dot the semantic anchor contains:
+    direct min/max | DoT per tick | DoT total | duration | tick interval | cast
 
-For a damage_with_dot spell the authored/resolved model is:
-    level -> direct min/max | DoT total min/max | duration | cast time | tick
-
-Between native rank anchors values are linearly interpolated. Integer gameplay
-amounts and durations are rounded; cast time is quantized to 100 ms so client
-and server can display/use values such as 1.6 s. The generated TSV still stores
-effect base-point ranges because AzerothCore consumes per-effect values at cast
-time, but the semantic JSON remains the source of truth for client tooltips and
-future profile-specific rules.
+The IMPORTANT runtime rule is that periodic damage is interpolated per tick.
+AzerothCore stores and executes periodic aura damage as an integer amount per
+tick, so an independently interpolated total can be impossible to represent
+exactly. The displayed total is therefore derived from the same integer tick
+amount and tick count that the server executes. Native rank anchors still store
+their total DoT as a validation/reference field and must round-trip exactly.
 
 Profiles currently emitted:
   * damage_with_dot  - direct school damage + periodic-damage aura
@@ -27,9 +22,8 @@ Profiles currently emitted:
   * dot_damage       - periodic-damage aura only
   * generic          - existing scalable effect curves, plus cast/duration
 
-No spell-power/intellect formula is baked into this file. Runtime values are
-base spell values; AzerothCore applies its normal spell-power, crit, aura and
-target modifiers afterwards.
+No spell-power/intellect formula is baked into this data. AzerothCore applies
+normal spell power, crit, haste, aura, target and other modifiers afterwards.
 """
 
 from __future__ import annotations
@@ -42,12 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from generate_normalized_spells import (
-    AmountRange,
-    effect_range,
-    interpolate_ranges,
-    linear_int,
-)
+from generate_normalized_spells import AmountRange, effect_range, interpolate_ranges
 from patch_adventurer_class_dbcs import read_dbc, set_u32, u32, write_dbc
 
 MODULE = Path(__file__).resolve().parent.parent
@@ -57,9 +46,6 @@ SPELL_ID = 0
 CAST_TIME_INDEX = 28
 DURATION_INDEX = 40
 EFFECT_TYPE = 71
-EFFECT_DIE_SIDES = 74
-EFFECT_REAL_POINTS_PER_LEVEL = 77
-EFFECT_BASE_POINTS = 80
 EFFECT_APPLY_AURA = 95
 EFFECT_AMPLITUDE = 98
 
@@ -103,15 +89,18 @@ def load_json(path: Path, label: str) -> dict[str, Any]:
     return value
 
 
-def rows_by_id(path: Path) -> tuple[int, int, list[bytearray], bytearray, bytes, dict[int, bytearray]]:
+def rows_by_id(
+    path: Path,
+) -> tuple[int, int, list[bytearray], bytearray, bytes, dict[int, bytearray]]:
     fields, record_size, records, strings, trailing = read_dbc(path)
-    return fields, record_size, records, strings, trailing, {u32(row, 0): row for row in records}
-
-
-def signed_row_value(row: bytearray | None, field: int, default: int = 0) -> int:
-    if row is None:
-        return default
-    return i32(row, field)
+    return (
+        fields,
+        record_size,
+        records,
+        strings,
+        trailing,
+        {u32(row, 0): row for row in records},
+    )
 
 
 def load_cast_times(path: Path) -> dict[int, int]:
@@ -199,9 +188,15 @@ def native_ranks(
         if level in seen_levels:
             raise ProfileError(f"custom spell {spec.get('id')} has duplicate native level {level}")
         seen_levels.add(level)
-        cast_ms = casts.get(u32(row, CAST_TIME_INDEX), 0)
-        duration_ms = durations.get(u32(row, DURATION_INDEX), 0)
-        result.append(NativeRank(spell_id, level, row, cast_ms, duration_ms))
+        result.append(
+            NativeRank(
+                spell_id=spell_id,
+                level=level,
+                row=row,
+                cast_ms=casts.get(u32(row, CAST_TIME_INDEX), 0),
+                duration_ms=durations.get(u32(row, DURATION_INDEX), 0),
+            )
+        )
     result.sort(key=lambda rank: rank.level)
     return result
 
@@ -234,13 +229,8 @@ def detect_profile(ranks: list[NativeRank]) -> tuple[str, int | None, int | None
     return "generic", None, None
 
 
-def amount_anchor_dict(level: int, amount: AmountRange) -> dict[str, int]:
-    return {"level": level, "min": amount.minimum, "max": amount.maximum}
-
-
 def semantic_anchors(
     ranks: list[NativeRank],
-    profile: str,
     direct_index: int | None,
     periodic_index: int | None,
 ) -> list[dict[str, Any]]:
@@ -252,12 +242,13 @@ def semantic_anchors(
             "cast_ms": rank.cast_ms,
             "duration_ms": rank.duration_ms,
         }
+
         if direct_index is not None:
             direct = effect_range(rank.row, direct_index)
             entry["direct"] = {"min": direct.minimum, "max": direct.maximum}
 
         if periodic_index is not None:
-            periodic = effect_range(rank.row, periodic_index)
+            per_tick = effect_range(rank.row, periodic_index)
             amplitude_ms = u32(rank.row, EFFECT_AMPLITUDE + periodic_index)
             if amplitude_ms <= 0:
                 raise ProfileError(
@@ -265,16 +256,17 @@ def semantic_anchors(
                 )
             ticks = max(1, rank.duration_ms // amplitude_ms) if rank.duration_ms > 0 else 1
             entry["tick_ms"] = amplitude_ms
+            entry["dot_tick"] = {"min": per_tick.minimum, "max": per_tick.maximum}
             entry["dot_total"] = {
-                "min": periodic.minimum * ticks,
-                "max": periodic.maximum * ticks,
+                "min": per_tick.minimum * ticks,
+                "max": per_tick.maximum * ticks,
             }
 
         anchors.append(entry)
     return anchors
 
 
-def synthetic_amount_points(
+def amount_levels(
     anchors: list[tuple[int, AmountRange]],
     max_level: int,
     low_level_offset: float,
@@ -282,27 +274,21 @@ def synthetic_amount_points(
     return interpolate_ranges(anchors, max_level, low_level_offset)
 
 
-def divide_dot_total(total: AmountRange, ticks: int) -> AmountRange:
-    ticks = max(1, ticks)
-    minimum = linear_int(0, total.minimum, 1.0 / ticks)
-    maximum = linear_int(0, total.maximum, 1.0 / ticks)
-    return AmountRange(min(minimum, maximum), max(minimum, maximum))
-
-
 def build_profile_runtime(
     ranks: list[NativeRank],
-    profile: str,
     direct_index: int | None,
     periodic_index: int | None,
     resolved_effects: list[dict[str, Any]],
     max_level: int,
     low_level_offset: float,
 ) -> tuple[list[RuntimeLevel], list[dict[str, Any]]]:
-    cast_levels = interpolate_scalar([(rank.level, rank.cast_ms) for rank in ranks], max_level, 100)
+    cast_levels = interpolate_scalar(
+        [(rank.level, rank.cast_ms) for rank in ranks], max_level, 100
+    )
     duration_levels = interpolate_scalar(
         [(rank.level, rank.duration_ms) for rank in ranks], max_level, 1000
     )
-    semantic = semantic_anchors(ranks, profile, direct_index, periodic_index)
+    semantic = semantic_anchors(ranks, direct_index, periodic_index)
 
     effect_levels: dict[int, tuple[AmountRange, ...]] = {}
     for effect in resolved_effects:
@@ -319,51 +305,32 @@ def build_profile_runtime(
             )
             for anchor in raw_anchors
         ]
-        effect_levels[effect_index] = synthetic_amount_points(anchors, max_level, low_level_offset)
-
-    if direct_index is not None:
-        direct_anchors = [
-            (rank.level, effect_range(rank.row, direct_index))
-            for rank in ranks
-        ]
-        effect_levels[direct_index] = synthetic_amount_points(
-            direct_anchors, max_level, low_level_offset
+        effect_levels[effect_index] = amount_levels(
+            anchors, max_level, low_level_offset
         )
 
-    dot_total_levels: tuple[AmountRange, ...] | None = None
-    tick_ms_levels: tuple[int, ...] | None = None
+    if direct_index is not None:
+        effect_levels[direct_index] = amount_levels(
+            [(rank.level, effect_range(rank.row, direct_index)) for rank in ranks],
+            max_level,
+            low_level_offset,
+        )
+
+    # Periodic effects are intentionally interpolated PER TICK. This is the
+    # exact integer value AzerothCore executes and avoids inventing a total that
+    # cannot be represented by an integer amount repeated N times.
     if periodic_index is not None:
-        total_anchors: list[tuple[int, AmountRange]] = []
-        tick_anchors: list[tuple[int, int]] = []
-        for rank in ranks:
-            per_tick = effect_range(rank.row, periodic_index)
-            amplitude_ms = u32(rank.row, EFFECT_AMPLITUDE + periodic_index)
-            if amplitude_ms <= 0:
-                raise ProfileError(
-                    f"spell {rank.spell_id} periodic-damage effect {periodic_index} has zero amplitude"
-                )
-            ticks = max(1, rank.duration_ms // amplitude_ms) if rank.duration_ms > 0 else 1
-            total_anchors.append(
-                (
-                    rank.level,
-                    AmountRange(per_tick.minimum * ticks, per_tick.maximum * ticks),
-                )
-            )
-            tick_anchors.append((rank.level, amplitude_ms))
-        dot_total_levels = synthetic_amount_points(total_anchors, max_level, low_level_offset)
-        tick_ms_levels = interpolate_scalar(tick_anchors, max_level, 1)
+        effect_levels[periodic_index] = amount_levels(
+            [(rank.level, effect_range(rank.row, periodic_index)) for rank in ranks],
+            max_level,
+            low_level_offset,
+        )
 
     runtime: list[RuntimeLevel] = []
     for level in range(1, max_level + 1):
         effects: list[AmountRange | None] = [None, None, None]
         for effect_index, levels in effect_levels.items():
             effects[effect_index] = levels[level - 1]
-
-        if periodic_index is not None and dot_total_levels is not None and tick_ms_levels is not None:
-            duration_ms = duration_levels[level - 1]
-            tick_ms = max(1, tick_ms_levels[level - 1])
-            ticks = max(1, duration_ms // tick_ms) if duration_ms > 0 else 1
-            effects[periodic_index] = divide_dot_total(dot_total_levels[level - 1], ticks)
 
         runtime.append(
             RuntimeLevel(
@@ -375,10 +342,7 @@ def build_profile_runtime(
     return runtime, semantic
 
 
-def patch_custom_fallback_cast(
-    spell_path: Path,
-    specs: list[dict[str, Any]],
-) -> int:
+def patch_custom_fallback_cast(spell_path: Path, specs: list[dict[str, Any]]) -> int:
     fields, record_size, records, strings, trailing = read_dbc(spell_path)
     by_id = {u32(row, SPELL_ID): row for row in records}
     changed = 0
@@ -397,9 +361,7 @@ def patch_custom_fallback_cast(
     return changed
 
 
-def render_runtime_tsv(
-    runtime_by_spell: dict[int, list[RuntimeLevel]],
-) -> str:
+def render_runtime_tsv(runtime_by_spell: dict[int, list[RuntimeLevel]]) -> str:
     lines = [
         "# Aventureros de Azeroth profile-aware normalized spell scaling v2",
         "# spell_id level cast_ms duration_ms e0_min e0_max e1_min e1_max e2_min e2_max",
@@ -432,15 +394,21 @@ def main() -> None:
         raise SystemExit("Profiled scaling DBC input missing: " + ", ".join(missing))
 
     try:
-        resolved = load_json(args.resolved.expanduser().resolve(), "resolved custom spell registry")
-        registry = load_json(args.registry.expanduser().resolve(), "custom spell registry")
+        resolved = load_json(
+            args.resolved.expanduser().resolve(), "resolved custom spell registry"
+        )
+        registry = load_json(
+            args.registry.expanduser().resolve(), "custom spell registry"
+        )
         max_level = int(resolved["runtime_max_level"])
         specs = resolved.get("spells")
         if max_level <= 0 or not isinstance(specs, list) or not specs:
             raise ProfileError("resolved registry has invalid runtime_max_level/spells")
 
         low_level_offset = profile_low_level_offset(registry)
-        _fields, _size, _records, _strings, _trailing, spell_rows = rows_by_id(dbc_dir / "Spell.dbc")
+        _fields, _size, _records, _strings, _trailing, spell_rows = rows_by_id(
+            dbc_dir / "Spell.dbc"
+        )
         casts = load_cast_times(dbc_dir / "SpellCastTimes.dbc")
         durations = load_durations(dbc_dir / "SpellDuration.dbc")
 
@@ -457,10 +425,11 @@ def main() -> None:
             profile, direct_index, periodic_index = detect_profile(ranks)
             runtime, semantic = build_profile_runtime(
                 ranks,
-                profile,
                 direct_index,
                 periodic_index,
-                raw_spec.get("effects") if isinstance(raw_spec.get("effects"), list) else [],
+                raw_spec.get("effects")
+                if isinstance(raw_spec.get("effects"), list)
+                else [],
                 max_level,
                 low_level_offset,
             )
@@ -480,11 +449,15 @@ def main() -> None:
                 item["periodic_effect_index"] = periodic_index
             profile_specs.append(item)
 
-        changed_cast_rows = patch_custom_fallback_cast(dbc_dir / "Spell.dbc", specs)
+        changed_cast_rows = patch_custom_fallback_cast(
+            dbc_dir / "Spell.dbc", specs
+        )
 
         scaling_output = args.scaling_output.expanduser().resolve()
         scaling_output.parent.mkdir(parents=True, exist_ok=True)
-        scaling_output.write_text(render_runtime_tsv(runtime_by_spell), encoding="utf-8")
+        scaling_output.write_text(
+            render_runtime_tsv(runtime_by_spell), encoding="utf-8"
+        )
 
         profiles_output = args.profiles_output.expanduser().resolve()
         profiles_output.parent.mkdir(parents=True, exist_ok=True)
@@ -494,12 +467,17 @@ def main() -> None:
                     "version": 2,
                     "runtime_max_level": max_level,
                     "low_level_offset": low_level_offset,
-                    "generated_from": "native rank Spell.dbc + SpellCastTimes.dbc + SpellDuration.dbc",
+                    "periodic_model": "per_tick_integer_interpolation",
+                    "generated_from": (
+                        "native rank Spell.dbc + SpellCastTimes.dbc + "
+                        "SpellDuration.dbc"
+                    ),
                     "spells": profile_specs,
                 },
                 indent=2,
                 ensure_ascii=False,
-            ) + "\n",
+            )
+            + "\n",
             encoding="utf-8",
         )
     except (KeyError, TypeError, ValueError, ProfileError) as exc:
@@ -507,9 +485,13 @@ def main() -> None:
 
     print("Profile-aware custom spell scaling generated:")
     print(f"  spells: {len(profile_specs)}")
-    print("  profiles: " + ", ".join(f"{key}={profile_counts[key]}" for key in sorted(profile_counts)))
+    print(
+        "  profiles: "
+        + ", ".join(f"{key}={profile_counts[key]}" for key in sorted(profile_counts))
+    )
     print(f"  runtime levels: 1-{max_level}")
-    print("  interpolation: effect amounts=integer, duration=1s, cast=0.1s")
+    print("  interpolation: effects/per-tick=integer, duration=1s, cast=0.1s")
+    print("  periodic totals: derived from runtime integer tick amount x tick count")
     print(f"  custom DBC fallback casts restored to rank-1 source: {changed_cast_rows}")
     print(f"  runtime TSV v2: {scaling_output}")
     print(f"  semantic profiles: {profiles_output}")
