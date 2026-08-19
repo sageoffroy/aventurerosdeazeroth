@@ -5,10 +5,15 @@ The production catalog intentionally stays broad. This wrapper narrows the
 initial <=20 normalization cohort by removing manually reviewed talent proc,
 form-granted and duplicate helper rows before custom IDs are assigned.
 
-The 201000-201999 range belongs to Aventureros custom spells, so each reviewed
+The 200000-299999 range belongs to Aventureros custom spells, so each reviewed
 generation first removes prior generated rows from Spell.dbc and
 SkillLineAbility.dbc. That makes regeneration deterministic after the reviewed
 cohort changes and prevents stale custom rows surviving an earlier run.
+
+Aventureros does not use the stock Shaman totem-item progression. After the
+custom rows are generated, both legacy Totem item fields and TotemCategory
+requirements are cleared on every custom spell. A drafted totem therefore works
+without class quests or hidden inventory prerequisites.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from reviewed_spell_exclusions import ExclusionError, load_excluded_spell_ids
 
 CUSTOM_MIN = 200000
 CUSTOM_MAX = 299999
+TOTEM_REQUIREMENT_FIELDS = (50, 51, 222, 223)
 
 
 def argument_path(name: str) -> Path:
@@ -55,6 +61,31 @@ def clear_generated_custom_rows(dbc_dir: Path) -> tuple[int, int]:
     return removed_spells, removed_abilities
 
 
+def strip_custom_totem_requirements(dbc_dir: Path) -> int:
+    spell_path = dbc_dir / "Spell.dbc"
+    fields, record_size, records, strings, trailing = generator.read_dbc(spell_path)
+    changed = 0
+
+    for row in records:
+        spell_id = generator.u32(row, generator.SPELL_ID)
+        if not CUSTOM_MIN <= spell_id <= CUSTOM_MAX:
+            continue
+
+        row_changed = False
+        for field in TOTEM_REQUIREMENT_FIELDS:
+            if generator.u32(row, field) != 0:
+                generator.set_u32(row, field, 0)
+                row_changed = True
+
+        if row_changed:
+            changed += 1
+
+    if changed:
+        generator.write_dbc(spell_path, fields, record_size, records, strings, trailing)
+
+    return changed
+
+
 def main() -> None:
     try:
         excluded = load_excluded_spell_ids()
@@ -65,7 +96,7 @@ def main() -> None:
     removed_spells, removed_abilities = clear_generated_custom_rows(dbc_dir)
     print(
         "Reviewed custom DBC cleanup: "
-        f"Spell.dbc={removed_spells}, SkillLineAbility.dbc={removed_abilities} stale 201xxx rows removed"
+        f"Spell.dbc={removed_spells}, SkillLineAbility.dbc={removed_abilities} stale custom rows removed"
     )
 
     original_build_catalog = generator.build_catalog
@@ -76,6 +107,12 @@ def main() -> None:
 
     generator.build_catalog = reviewed_build_catalog
     generator.main()
+
+    stripped = strip_custom_totem_requirements(dbc_dir)
+    print(
+        "Reviewed custom DBC totem requirements removed: "
+        f"{stripped} custom spells changed"
+    )
 
 
 if __name__ == "__main__":
