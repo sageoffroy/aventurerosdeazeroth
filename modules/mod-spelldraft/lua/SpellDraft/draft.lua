@@ -16,6 +16,8 @@ local STARTING_BANS = 3
 
 local OFFER_SIZE = 3
 local LOW_LEVEL_POOL_FLOOR = 20
+local CUSTOM_SPELL_OFFSET = 200000
+local CUSTOM_SPELL_MAX = 299999
 
 local scriptPath = debug.getinfo(1).source:sub(2)
 local parentPath = scriptPath:match("(.+[/\\])") or ""
@@ -24,6 +26,7 @@ if not SpellDraftCatalog then
 end
 
 local SPELL_POOL = SpellDraftCatalog or {}
+local TEACH_MAP = SpellDraftTeachMap or {}
 local RARITY_DISTRIBUTION = SpellDraftRarityDistribution or {
     [0] = 70.0,
     [1] = 20.0,
@@ -39,6 +42,29 @@ end
 local POOL_BY_ID = {}
 for _, entry in ipairs(SPELL_POOL) do
     POOL_BY_ID[entry.id] = entry
+end
+
+local TAUGHT_ROOTS = {}
+for _, taught in pairs(TEACH_MAP) do
+    for _, nativeRoot in ipairs(taught) do
+        TAUGHT_ROOTS[nativeRoot] = true
+    end
+end
+
+local function NativeRootForRuntimeId(spellId)
+    if spellId >= CUSTOM_SPELL_OFFSET and spellId <= CUSTOM_SPELL_MAX then
+        return spellId - CUSTOM_SPELL_OFFSET
+    end
+    return spellId
+end
+
+local function EntryForNativeRoot(nativeRoot)
+    return POOL_BY_ID[nativeRoot]
+        or POOL_BY_ID[CUSTOM_SPELL_OFFSET + nativeRoot]
+end
+
+local function IsTaughtEntry(entry)
+    return entry and TAUGHT_ROOTS[NativeRootForRuntimeId(entry.id)] == true
 end
 
 -- ALE database Execute calls are queued. Keep authoritative per-session caches
@@ -256,30 +282,58 @@ local function PlayerHasAnyRank(player, entry)
     return false
 end
 
+local function AddCapabilitiesFromEntry(entry, capabilities, visited)
+    if not entry or visited[entry.id] then
+        return
+    end
+
+    visited[entry.id] = true
+
+    for _, capability in ipairs(entry.grants or {}) do
+        capabilities[capability] = true
+    end
+
+    local nativeRoot = NativeRootForRuntimeId(entry.id)
+    for _, taughtRoot in ipairs(TEACH_MAP[nativeRoot] or {}) do
+        AddCapabilitiesFromEntry(
+            EntryForNativeRoot(taughtRoot),
+            capabilities,
+            visited
+        )
+    end
+end
+
 local function BuildCapabilities(state)
     local capabilities = {}
+    local visited = {}
 
     for spellId, _ in pairs(state.set or {}) do
-        local entry = POOL_BY_ID[spellId]
-
-        if entry then
-            for _, capability in ipairs(entry.grants or {}) do
-                capabilities[capability] = true
-            end
-        end
+        AddCapabilitiesFromEntry(
+            POOL_BY_ID[spellId],
+            capabilities,
+            visited
+        )
     end
 
     return capabilities
 end
 
+-- Multiple requires tags are alternatives. Any one capability unlocks the
+-- card. This lets either Bear or Cat unlock Faerie Fire (Feral), and any
+-- warrior stance listed by a multi-stance ability unlock that card.
 local function RequirementsMet(entry, capabilities)
-    for _, capability in ipairs(entry.requires or {}) do
-        if not capabilities[capability] then
-            return false
+    local requirements = entry.requires or {}
+    if #requirements == 0 then
+        return true
+    end
+
+    for _, capability in ipairs(requirements) do
+        if capabilities[capability] then
+            return true
         end
     end
 
-    return true
+    return false
 end
 
 local function RollRarity()
@@ -326,6 +380,7 @@ local function BuildCandidates(player, excluded)
 
     for _, entry in ipairs(SPELL_POOL) do
         if entry.minLevel <= queryLevel
+            and not IsTaughtEntry(entry)
             and RequirementsMet(entry, capabilities)
             and not state.set[entry.id]
             and not banned.set[entry.id]
@@ -422,6 +477,7 @@ local function OfferIsCurrent(player, offer)
     for _, spellId in ipairs(offer) do
         local entry = POOL_BY_ID[spellId]
         if not entry
+            or IsTaughtEntry(entry)
             or state.set[spellId]
             or banned.set[spellId]
             or not RequirementsMet(entry, capabilities) then
@@ -474,20 +530,17 @@ local function OfferContains(offer, spellId)
     return false
 end
 
-local function LearnDraftedEntry(player, entry)
+local function LearnEntryRanks(player, entry)
     if not entry then
         return
     end
 
-    -- A card always grants its root rank, even when the stock trainer would
-    -- normally teach that root above the player's current level. The low-level
-    -- draft intentionally sees the class pool up through level 20.
+    -- A drafted or taught card always grants its root rank immediately.
     if not player:HasSpell(entry.id) then
         player:LearnSpell(entry.id)
     end
 
-    -- Higher ranks follow normal player level progression after the ability was
-    -- drafted. Do not use the level-20 eligibility floor for rank upgrades.
+    -- Higher ranks continue to follow normal player level progression.
     local level = player:GetLevel() or 1
     local best = entry.id
     for _, rank in ipairs(entry.ranks or {}) do
@@ -499,6 +552,38 @@ local function LearnDraftedEntry(player, entry)
     if best ~= entry.id and not player:HasSpell(best) then
         player:LearnSpell(best)
     end
+end
+
+local function LearnDraftedEntry(player, entry)
+    if not entry then
+        return
+    end
+
+    local visited = {}
+
+    local function LearnRecursive(current)
+        if not current or visited[current.id] then
+            return
+        end
+
+        visited[current.id] = true
+        LearnEntryRanks(player, current)
+
+        local nativeRoot = NativeRootForRuntimeId(current.id)
+        for _, taughtRoot in ipairs(TEACH_MAP[nativeRoot] or {}) do
+            local taughtEntry = EntryForNativeRoot(taughtRoot)
+
+            if taughtEntry then
+                LearnRecursive(taughtEntry)
+            elseif not player:HasSpell(taughtRoot) then
+                -- Utility spells that are intentionally not independent cards
+                -- still belong to the package and are learned natively.
+                player:LearnSpell(taughtRoot)
+            end
+        end
+    end
+
+    LearnRecursive(entry)
 end
 
 local function RestoreAndUpgradeDraftedSpells(player)
@@ -526,7 +611,7 @@ local function AcceptPick(player, spellId)
     end
 
     local entry = POOL_BY_ID[spellId]
-    if not entry then
+    if not entry or IsTaughtEntry(entry) then
         ClearPendingOffer(guid)
         EnsureAndSendOffer(player)
         return
