@@ -85,8 +85,8 @@ def load_resolved(path: Path) -> tuple[int, dict[int, dict[str, Any]]]:
             raise FinalizeError(f"{path}: malformed spells[{index}]") from exc
         if spell_id in result:
             raise FinalizeError(f"{path}: duplicate custom spell ID {spell_id}")
-        if not 201000 <= spell_id <= 201999:
-            raise FinalizeError(f"{path}: custom spell ID outside 201000-201999: {spell_id}")
+        if not 200000 <= spell_id <= 299999:
+            raise FinalizeError(f"{path}: custom spell ID outside 200000-299999: {spell_id}")
         if not isinstance(native_ranks, list) or not native_ranks:
             raise FinalizeError(f"{path}: custom spell {spell_id} has no native_ranks")
         result[spell_id] = spell

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -17,6 +18,9 @@ ADVENTURER_WORLD_SQL = (
 )
 SPELLDRAFT_CHARACTER_SQL = (
     REPO / "data/sql/updates/pending_db_characters/rev_1787076000000000000.sql"
+)
+SPELLDRAFT_DETERMINISTIC_ID_SQL = (
+    REPO / "data/sql/updates/pending_db_characters/rev_1787166000000000000.sql"
 )
 SPELL_RANKS_SQL = REPO / "data/sql/base/db_world/spell_ranks.sql"
 sys.path.insert(0, str(TOOLS))
@@ -129,6 +133,86 @@ def validate_sql() -> None:
     require("CREATE TABLE IF NOT EXISTS `spelldraft_pending_offer`" in character_sql,
             "character SQL persists the pending offer")
 
+    deterministic_id_sql = read(SPELLDRAFT_DETERMINISTIC_ID_SQL)
+
+    deterministic_rows = [
+        (int(old_id), int(new_id), int(native_root))
+        for old_id, new_id, native_root in re.findall(
+            r"^\s*\((\d+),\s*(\d+),\s*(\d+)\)[,;]\s*$",
+            deterministic_id_sql,
+            re.MULTILINE,
+        )
+    ]
+
+    require(
+        len(deterministic_rows) == 205,
+        "deterministic ID migration contains all 205 legacy mappings",
+    )
+
+    require(
+        len({old_id for old_id, _, _ in deterministic_rows}) == 205,
+        "deterministic ID migration legacy IDs are unique",
+    )
+
+    require(
+        len({new_id for _, new_id, _ in deterministic_rows}) == 205,
+        "deterministic ID migration destination IDs are unique",
+    )
+
+    require(
+        all(
+            201000 <= old_id <= 201999
+            for old_id, _, _ in deterministic_rows
+        ),
+        "deterministic ID migration sources are legacy normalized IDs",
+    )
+
+    require(
+        all(
+            200000 <= new_id <= 299999
+            and new_id == 200000 + native_root
+            for _, new_id, native_root in deterministic_rows
+        ),
+        "deterministic ID migration obeys custom_id = 200000 + native_root",
+    )
+
+    require(
+        "START TRANSACTION;" in deterministic_id_sql
+        and "COMMIT;" in deterministic_id_sql,
+        "deterministic ID migration is transactional",
+    )
+
+    require(
+        "CREATE TEMPORARY TABLE `tmp_spelldraft_character_spell`" in deterministic_id_sql
+        and "CREATE TEMPORARY TABLE `tmp_spelldraft_drafted`" in deterministic_id_sql
+        and "CREATE TEMPORARY TABLE `tmp_spelldraft_banned`" in deterministic_id_sql,
+        "deterministic ID migration snapshots primary-keyed spell state",
+    )
+
+    require(
+        "DELETE c" in deterministic_id_sql
+        and "DELETE d" in deterministic_id_sql
+        and "DELETE b" in deterministic_id_sql,
+        "deterministic ID migration removes legacy identities before reinsertion",
+    )
+
+    require(
+        "UPDATE `spelldraft_pending_offer`" in deterministic_id_sql,
+        "deterministic ID migration rewrites pending card offers",
+    )
+
+    require(
+        deterministic_id_sql.count("WHEN ") == 205 * 3,
+        "pending offer migration contains all three deterministic CASE mappings",
+    )
+
+    require(
+        "UPDATE `character_spell`" not in deterministic_id_sql
+        and "UPDATE `spelldraft_drafted_spells`" not in deterministic_id_sql
+        and "UPDATE `spelldraft_banned_spells`" not in deterministic_id_sql,
+        "primary-keyed spell state is never migrated with unsafe in-place UPDATE",
+    )
+
     ranks_sql = read(SPELL_RANKS_SQL)
     require("CREATE TABLE `spell_ranks`" in ranks_sql,
             "AzerothCore canonical spell_ranks table is available")
@@ -186,8 +270,10 @@ def validate_normalized_spells() -> None:
     registry = json.loads(registry_text)
     require(registry.get("version") == 2,
             "custom spell registry uses normalized-spell schema v2")
-    require(registry.get("custom_id_range") == [201000, 201999],
-            "custom spell IDs stay in reserved 201000-201999 range")
+    require(registry.get("custom_id_range") == [200000, 299999],
+            "custom spell IDs stay in reserved 200000-299999 range")
+    require(registry.get("custom_id_offset") == 200000,
+            "custom spell IDs use deterministic native-root offset 200000")
     selection = registry.get("selection", {})
     require(selection.get("max_first_rank_level") == 20,
             "initial normalized cohort selects first ranks through level 20")
@@ -196,29 +282,29 @@ def validate_normalized_spells() -> None:
     require(selection.get("include_talents") is False,
             "initial normalized cohort remains non-talent SpellDraft abilities")
 
-    pinned = {
-        int(entry["clone_from"]): int(entry["id"])
+    customizations = {
+        int(entry["clone_from"]): entry
         for entry in registry.get("pinned", [])
     }
-    for source, custom in (
-        (100, 201000),
-        (2912, 201001),
-        (116, 201002),
-        (133, 201003),
-        (8921, 201004),
-        (585, 201005),
-        (14914, 201006),
-    ):
-        require(pinned.get(source) == custom,
-                f"legacy normalized spell identity preserved: {source} -> {custom}")
+    require(
+        customizations.get(100, {}).get("changes", {}).get("stance_mask") == 0
+        and customizations.get(100, {}).get("changes", {}).get("stance_exclude") == 0,
+        "Charge normalization preserves stance-restriction removal",
+    )
+    require(
+        all("id" not in entry for entry in registry.get("pinned", [])),
+        "normalized spell customizations do not pin numeric custom IDs",
+    )
 
     normalizer = read(TOOLS / "generate_normalized_spells.py")
     normalizer_expectations = {
         "build_catalog(": "normalizer reuses exact production SpellDraft eligibility",
+        "load_card_dependencies": "normalizer loads canonical card dependency metadata",
+        "load_rarity_overrides": "normalizer loads canonical rarity overrides",
         "parse_spell_ranks": "normalizer reads canonical rank families",
         '"SpellDuration.dbc"': "normalizer reads native rank durations",
         "strongest_by_level": "duplicate-level rank anchors keep the strongest sample",
-        "DEFAULT_PINNED_IDS": "normalizer preserves established custom IDs",
+        "custom_id = offset + root": "normalizer derives every custom ID deterministically from its native root",
         "EFFECT_DIE_SIDES": "normalizer owns native random effect ranges",
         "EFFECT_REAL_POINTS_PER_LEVEL": "normalizer disables hidden native per-level scaling on custom effects",
         '"--scaling-output"': "normalizer emits the runtime per-level scaling table",
@@ -256,7 +342,7 @@ def validate_normalized_spells() -> None:
             "runtime supports rank-dependent aura durations")
     require('GetOption<std::string>("DataDir"' in scaling,
             "runtime scaling table is loaded from worldserver DataDir")
-    require("201000" in scaling and "201999" in scaling,
+    require("200000" in scaling and "299999" in scaling,
             "runtime accepts only reserved custom spell IDs")
 
     world_header = read(MODULE / "src/SpellDraftWorldScript.h")
@@ -295,7 +381,8 @@ def validate_draft_engine() -> None:
     draft = read(MODULE / "lua/SpellDraft/draft.lua")
     expectations = {
         "local CLASS_ADVENTURER = 10": "draft engine is class-10-only",
-        "local DRAFTS_PER_LEVEL = 10": "Adventurer receives ten drafts per level",
+        "local STARTING_DRAFTS = 3": "Adventurer starts with three drafts",
+        "local DRAFTS_PER_ADDITIONAL_LEVEL = 10": "additional levels currently grant ten drafts",
         "local LOW_LEVEL_POOL_FLOOR = 20": "level 1 uses the historical level-20 pool floor",
         'dofile(parentPath .. "catalog.lua")': "runtime loads the generated real catalog",
         "RollRarity": "offers use rarity-weighted selection",

@@ -34,7 +34,11 @@ from typing import Any
 from generate_spelldraft_catalog import (
     CLASS_SET,
     CatalogError,
+    DEFAULT_CARD_DEPENDENCIES,
+    DEFAULT_RARITY_OVERRIDES,
     build_catalog,
+    load_card_dependencies,
+    load_rarity_overrides,
     parse_spell_data,
     parse_spell_ranks,
     read_dbc as read_catalog_dbc,
@@ -108,17 +112,6 @@ DIRECT_MAGNITUDE_EFFECTS = {
 }
 AURA_EFFECT_TYPES = {6, 27, 35, 65, 119, 128, 129, 143}
 
-# Historical IDs already used during the proof-of-concept. Keeping them pinned
-# means old test notes and future migrations can refer to the same custom IDs.
-DEFAULT_PINNED_IDS = {
-    100: 201000,
-    2912: 201001,
-    116: 201002,
-    133: 201003,
-    8921: 201004,
-    585: 201005,
-    14914: 201006,
-}
 
 CLASS_SKILL_LINES = {
     "MAGE": {6, 8, 237},
@@ -199,6 +192,9 @@ def load_policy(path: Path) -> dict[str, Any]:
     id_range = data.get("custom_id_range")
     if not isinstance(id_range, list) or len(id_range) != 2:
         raise NormalizeError("custom_id_range must be [min, max]")
+    custom_id_offset = data.get("custom_id_offset")
+    if not isinstance(custom_id_offset, int) or custom_id_offset <= 0:
+        raise NormalizeError("custom_id_offset must be a positive integer")
     selection = data.get("selection")
     if not isinstance(selection, dict):
         raise NormalizeError("selection must be an object")
@@ -412,33 +408,34 @@ def selected_skill_line(ability_dbc, root: int, class_name: str) -> int:
     raise NormalizeError(f"spell {root} has no SkillLineAbility row")
 
 
-def assign_ids(selected: list[dict[str, Any]], policy: dict[str, Any]) -> dict[int, int]:
+def assign_ids(
+    selected: list[dict[str, Any]],
+    policy: dict[str, Any],
+) -> dict[int, int]:
     low, high = [int(value) for value in policy["custom_id_range"]]
-    pinned: dict[int, int] = dict(DEFAULT_PINNED_IDS)
-    for item in policy.get("pinned", []):
-        pinned[int(item["clone_from"])] = int(item["id"])
+    offset = int(policy["custom_id_offset"])
 
-    selected_roots = {int(entry["id"]) for entry in selected}
-    invalid = [root for root in pinned if root not in selected_roots]
-    if invalid:
-        raise NormalizeError(
-            "pinned custom source(s) are not in the selected <=20 draft pool: "
-            + ", ".join(str(value) for value in sorted(invalid))
-        )
-    used = set(pinned.values())
-    if any(value < low or value > high for value in used) or len(used) != len(pinned):
-        raise NormalizeError("pinned custom IDs are invalid or duplicated")
+    result: dict[int, int] = {}
+    used: set[int] = set()
 
-    result = dict(pinned)
-    cursor = max(low, 201007)
-    for root in sorted(selected_roots - set(pinned)):
-        while cursor in used:
-            cursor += 1
-        if cursor > high:
-            raise NormalizeError(f"custom spell range {low}-{high} is exhausted")
-        result[root] = cursor
-        used.add(cursor)
-        cursor += 1
+    for entry in selected:
+        root = int(entry["id"])
+        custom_id = offset + root
+
+        if custom_id < low or custom_id > high:
+            raise NormalizeError(
+                f"native root {root} maps to custom spell {custom_id}, "
+                f"outside reserved range {low}-{high}"
+            )
+
+        if custom_id in used:
+            raise NormalizeError(
+                f"duplicate deterministic custom spell ID {custom_id}"
+            )
+
+        result[root] = custom_id
+        used.add(custom_id)
+
     return result
 
 
@@ -652,6 +649,8 @@ def main() -> None:
         excluded_classes = set(policy["selection"].get("exclude_classes", []))
 
         curated = parse_spell_data(args.spell_data.expanduser().resolve())
+        dependencies = load_card_dependencies(DEFAULT_CARD_DEPENDENCIES)
+        rarity_overrides = load_rarity_overrides(DEFAULT_RARITY_OVERRIDES)
         root_by_spell, ranks_by_root = parse_spell_ranks(args.spell_ranks_sql.expanduser().resolve())
         spell_dbc = read_catalog_dbc(dbc_dir / "Spell.dbc")
         skill_dbc = read_catalog_dbc(dbc_dir / "SkillLine.dbc")
@@ -672,6 +671,8 @@ def main() -> None:
                 talents,
                 root_by_spell,
                 ranks_by_root,
+                dependencies,
+                rarity_overrides,
             )
         selected = [
             entry for entry in base_catalog

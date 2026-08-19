@@ -1,0 +1,978 @@
+-- SpellDraft deterministic custom spell ID migration.
+--
+-- Old normalized custom IDs were allocated sequentially in 201000-201999.
+-- New identity is deterministic:
+--
+--     custom_id = 200000 + native_root
+--
+-- IMPORTANT:
+-- Some new IDs overlap numeric IDs from the old allocation.
+-- Therefore this migration MUST NOT use a direct in-place old_id -> new_id
+-- UPDATE for primary-keyed spell tables.
+--
+-- Snapshot -> delete old identities -> insert deterministic identities.
+--
+-- This migration is intentionally one-shot and is applied by AzerothCore's
+-- character database updater. Do not execute this file manually more than once.
+
+START TRANSACTION;
+
+DROP TEMPORARY TABLE IF EXISTS `tmp_spelldraft_id_map`;
+
+CREATE TEMPORARY TABLE `tmp_spelldraft_id_map` (
+    `old_id` INT UNSIGNED NOT NULL,
+    `new_id` INT UNSIGNED NOT NULL,
+    `native_root` INT UNSIGNED NOT NULL,
+    PRIMARY KEY (`old_id`),
+    UNIQUE KEY `uq_tmp_spelldraft_new_id` (`new_id`)
+);
+
+INSERT INTO `tmp_spelldraft_id_map`
+    (`old_id`, `new_id`, `native_root`)
+VALUES
+
+    (201000, 200100, 100),
+    (201001, 202912, 2912),
+    (201002, 200116, 116),
+    (201003, 200133, 133),
+    (201004, 208921, 8921),
+    (201005, 200585, 585),
+    (201006, 214914, 14914),
+    (201007, 200010, 10),
+    (201008, 200017, 17),
+    (201009, 200053, 53),
+    (201010, 200071, 71),
+    (201011, 200072, 72),
+    (201012, 200078, 78),
+    (201013, 200099, 99),
+    (201014, 200118, 118),
+    (201015, 200122, 122),
+    (201016, 200130, 130),
+    (201017, 200136, 136),
+    (201018, 200139, 139),
+    (201019, 200168, 168),
+    (201020, 200172, 172),
+    (201021, 200331, 331),
+    (201022, 200339, 339),
+    (201023, 200348, 348),
+    (201024, 200355, 355),
+    (201025, 200370, 370),
+    (201026, 200403, 403),
+    (201027, 200467, 467),
+    (201028, 200475, 475),
+    (201029, 200498, 498),
+    (201030, 200526, 526),
+    (201031, 200527, 527),
+    (201032, 200528, 528),
+    (201033, 200543, 543),
+    (201034, 200586, 586),
+    (201035, 200587, 587),
+    (201036, 200588, 588),
+    (201037, 200589, 589),
+    (201038, 200604, 604),
+    (201039, 200633, 633),
+    (201040, 200635, 635),
+    (201041, 200676, 676),
+    (201042, 200686, 686),
+    (201043, 200687, 687),
+    (201044, 200688, 688),
+    (201045, 200689, 689),
+    (201046, 200693, 693),
+    (201047, 200694, 694),
+    (201048, 200697, 697),
+    (201049, 200698, 698),
+    (201050, 200702, 702),
+    (201051, 200703, 703),
+    (201052, 200706, 706),
+    (201053, 200712, 712),
+    (201054, 200755, 755),
+    (201055, 200768, 768),
+    (201056, 200770, 770),
+    (201057, 200772, 772),
+    (201058, 200774, 774),
+    (201059, 200779, 779),
+    (201060, 200781, 781),
+    (201061, 200783, 783),
+    (201062, 200845, 845),
+    (201063, 200853, 853),
+    (201064, 200879, 879),
+    (201065, 200883, 883),
+    (201066, 200921, 921),
+    (201067, 200980, 980),
+    (201068, 200982, 982),
+    (201069, 201002, 1002),
+    (201070, 201008, 1008),
+    (201071, 201022, 1022),
+    (201072, 201066, 1066),
+    (201073, 201079, 1079),
+    (201074, 201082, 1082),
+    (201075, 201120, 1120),
+    (201076, 201126, 1126),
+    (201077, 201152, 1152),
+    (201078, 201160, 1160),
+    (201079, 201243, 1243),
+    (201080, 201449, 1449),
+    (201081, 201454, 1454),
+    (201082, 201459, 1459),
+    (201083, 201463, 1463),
+    (201084, 201494, 1494),
+    (201085, 201495, 1495),
+    (201086, 201513, 1513),
+    (201087, 201515, 1515),
+    (201088, 201535, 1535),
+    (201089, 201715, 1715),
+    (201090, 201752, 1752),
+    (201091, 201766, 1766),
+    (201092, 201776, 1776),
+    (201093, 201784, 1784),
+    (201094, 201804, 1804),
+    (201095, 201943, 1943),
+    (201096, 201953, 1953),
+    (201097, 201966, 1966),
+    (201098, 201978, 1978),
+    (201099, 202006, 2006),
+    (201100, 202008, 2008),
+    (201101, 202050, 2050),
+    (201102, 202054, 2054),
+    (201103, 202061, 2061),
+    (201104, 202098, 2098),
+    (201105, 202120, 2120),
+    (201106, 202136, 2136),
+    (201107, 202457, 2457),
+    (201108, 202484, 2484),
+    (201109, 202565, 2565),
+    (201110, 202637, 2637),
+    (201111, 202641, 2641),
+    (201112, 202643, 2643),
+    (201113, 202645, 2645),
+    (201114, 202687, 2687),
+    (201115, 202947, 2947),
+    (201116, 202973, 2973),
+    (201117, 202974, 2974),
+    (201118, 202983, 2983),
+    (201119, 203044, 3044),
+    (201120, 203561, 3561),
+    (201121, 203562, 3562),
+    (201122, 203563, 3563),
+    (201123, 203567, 3567),
+    (201124, 203599, 3599),
+    (201125, 205116, 5116),
+    (201126, 205118, 5118),
+    (201127, 205143, 5143),
+    (201128, 205171, 5171),
+    (201129, 205176, 5176),
+    (201130, 205185, 5185),
+    (201131, 205211, 5211),
+    (201132, 205215, 5215),
+    (201133, 205229, 5229),
+    (201134, 205277, 5277),
+    (201135, 205394, 5394),
+    (201136, 205487, 5487),
+    (201137, 205502, 5502),
+    (201138, 205504, 5504),
+    (201139, 205676, 5676),
+    (201140, 205697, 5697),
+    (201141, 205730, 5730),
+    (201142, 205740, 5740),
+    (201143, 205782, 5782),
+    (201144, 205784, 5784),
+    (201145, 206197, 6197),
+    (201146, 206307, 6307),
+    (201147, 206343, 6343),
+    (201148, 206346, 6346),
+    (201149, 206673, 6673),
+    (201150, 206770, 6770),
+    (201151, 206795, 6795),
+    (201152, 206807, 6807),
+    (201153, 206991, 6991),
+    (201154, 207294, 7294),
+    (201155, 207328, 7328),
+    (201156, 207384, 7384),
+    (201157, 207386, 7386),
+    (201158, 208004, 8004),
+    (201159, 208017, 8017),
+    (201160, 208024, 8024),
+    (201161, 208033, 8033),
+    (201162, 208042, 8042),
+    (201163, 208050, 8050),
+    (201164, 208056, 8056),
+    (201165, 208071, 8071),
+    (201166, 208075, 8075),
+    (201167, 208092, 8092),
+    (201168, 208122, 8122),
+    (201169, 208143, 8143),
+    (201170, 208647, 8647),
+    (201171, 208676, 8676),
+    (201172, 208936, 8936),
+    (201173, 208946, 8946),
+    (201174, 209484, 9484),
+    (201175, 212051, 12051),
+    (201176, 213163, 13163),
+    (201177, 213165, 13165),
+    (201178, 213795, 13795),
+    (201179, 215237, 15237),
+    (201180, 216689, 16689),
+    (201181, 216857, 16857),
+    (201182, 218960, 18960),
+    (201183, 219740, 19740),
+    (201184, 219742, 19742),
+    (201185, 219750, 19750),
+    (201186, 219883, 19883),
+    (201187, 219884, 19884),
+    (201188, 220217, 20217),
+    (201189, 220230, 20230),
+    (201190, 220271, 20271),
+    (201191, 220484, 20484),
+    (201192, 220736, 20736),
+    (201193, 221084, 21084),
+    (201194, 225780, 25780),
+    (201195, 226573, 26573),
+    (201196, 231789, 31789),
+    (201197, 232271, 32271),
+    (201198, 232272, 32272),
+    (201199, 234074, 34074),
+    (201200, 234428, 34428),
+    (201201, 250769, 50769),
+    (201202, 251722, 51722),
+    (201203, 252127, 52127),
+    (201204, 253408, 53408);
+
+-- -------------------------------------------------------------------------
+-- Learned custom spells
+-- -------------------------------------------------------------------------
+
+DROP TEMPORARY TABLE IF EXISTS `tmp_spelldraft_character_spell`;
+
+CREATE TEMPORARY TABLE `tmp_spelldraft_character_spell` AS
+SELECT
+    c.`guid`,
+    m.`new_id` AS `spell`,
+    c.`specMask`
+FROM `character_spell` c
+INNER JOIN `tmp_spelldraft_id_map` m
+    ON m.`old_id` = c.`spell`;
+
+DELETE c
+FROM `character_spell` c
+INNER JOIN `tmp_spelldraft_id_map` m
+    ON m.`old_id` = c.`spell`;
+
+INSERT INTO `character_spell`
+    (`guid`, `spell`, `specMask`)
+SELECT
+    `guid`,
+    `spell`,
+    `specMask`
+FROM `tmp_spelldraft_character_spell`;
+
+
+-- -------------------------------------------------------------------------
+-- Persisted drafted cards
+-- -------------------------------------------------------------------------
+
+DROP TEMPORARY TABLE IF EXISTS `tmp_spelldraft_drafted`;
+
+CREATE TEMPORARY TABLE `tmp_spelldraft_drafted` AS
+SELECT
+    d.`player_guid`,
+    m.`new_id` AS `spell_id`,
+    d.`draft_index`,
+    d.`picked_level`,
+    d.`created_at`
+FROM `spelldraft_drafted_spells` d
+INNER JOIN `tmp_spelldraft_id_map` m
+    ON m.`old_id` = d.`spell_id`;
+
+DELETE d
+FROM `spelldraft_drafted_spells` d
+INNER JOIN `tmp_spelldraft_id_map` m
+    ON m.`old_id` = d.`spell_id`;
+
+INSERT INTO `spelldraft_drafted_spells`
+    (`player_guid`, `spell_id`, `draft_index`, `picked_level`, `created_at`)
+SELECT
+    `player_guid`,
+    `spell_id`,
+    `draft_index`,
+    `picked_level`,
+    `created_at`
+FROM `tmp_spelldraft_drafted`;
+
+
+-- -------------------------------------------------------------------------
+-- Persisted banned cards
+-- -------------------------------------------------------------------------
+
+DROP TEMPORARY TABLE IF EXISTS `tmp_spelldraft_banned`;
+
+CREATE TEMPORARY TABLE `tmp_spelldraft_banned` AS
+SELECT
+    b.`player_guid`,
+    m.`new_id` AS `spell_id`,
+    b.`created_at`
+FROM `spelldraft_banned_spells` b
+INNER JOIN `tmp_spelldraft_id_map` m
+    ON m.`old_id` = b.`spell_id`;
+
+DELETE b
+FROM `spelldraft_banned_spells` b
+INNER JOIN `tmp_spelldraft_id_map` m
+    ON m.`old_id` = b.`spell_id`;
+
+INSERT INTO `spelldraft_banned_spells`
+    (`player_guid`, `spell_id`, `created_at`)
+SELECT
+    `player_guid`,
+    `spell_id`,
+    `created_at`
+FROM `tmp_spelldraft_banned`;
+
+
+-- -------------------------------------------------------------------------
+-- Pending offers
+--
+-- CASE performs exactly one lookup from the original value. This is important
+-- because some deterministic destination IDs are also old sequential IDs.
+-- -------------------------------------------------------------------------
+
+UPDATE `spelldraft_pending_offer`
+SET
+    `offer_1` =
+
+    CASE `offer_1`
+            WHEN 201000 THEN 200100
+            WHEN 201001 THEN 202912
+            WHEN 201002 THEN 200116
+            WHEN 201003 THEN 200133
+            WHEN 201004 THEN 208921
+            WHEN 201005 THEN 200585
+            WHEN 201006 THEN 214914
+            WHEN 201007 THEN 200010
+            WHEN 201008 THEN 200017
+            WHEN 201009 THEN 200053
+            WHEN 201010 THEN 200071
+            WHEN 201011 THEN 200072
+            WHEN 201012 THEN 200078
+            WHEN 201013 THEN 200099
+            WHEN 201014 THEN 200118
+            WHEN 201015 THEN 200122
+            WHEN 201016 THEN 200130
+            WHEN 201017 THEN 200136
+            WHEN 201018 THEN 200139
+            WHEN 201019 THEN 200168
+            WHEN 201020 THEN 200172
+            WHEN 201021 THEN 200331
+            WHEN 201022 THEN 200339
+            WHEN 201023 THEN 200348
+            WHEN 201024 THEN 200355
+            WHEN 201025 THEN 200370
+            WHEN 201026 THEN 200403
+            WHEN 201027 THEN 200467
+            WHEN 201028 THEN 200475
+            WHEN 201029 THEN 200498
+            WHEN 201030 THEN 200526
+            WHEN 201031 THEN 200527
+            WHEN 201032 THEN 200528
+            WHEN 201033 THEN 200543
+            WHEN 201034 THEN 200586
+            WHEN 201035 THEN 200587
+            WHEN 201036 THEN 200588
+            WHEN 201037 THEN 200589
+            WHEN 201038 THEN 200604
+            WHEN 201039 THEN 200633
+            WHEN 201040 THEN 200635
+            WHEN 201041 THEN 200676
+            WHEN 201042 THEN 200686
+            WHEN 201043 THEN 200687
+            WHEN 201044 THEN 200688
+            WHEN 201045 THEN 200689
+            WHEN 201046 THEN 200693
+            WHEN 201047 THEN 200694
+            WHEN 201048 THEN 200697
+            WHEN 201049 THEN 200698
+            WHEN 201050 THEN 200702
+            WHEN 201051 THEN 200703
+            WHEN 201052 THEN 200706
+            WHEN 201053 THEN 200712
+            WHEN 201054 THEN 200755
+            WHEN 201055 THEN 200768
+            WHEN 201056 THEN 200770
+            WHEN 201057 THEN 200772
+            WHEN 201058 THEN 200774
+            WHEN 201059 THEN 200779
+            WHEN 201060 THEN 200781
+            WHEN 201061 THEN 200783
+            WHEN 201062 THEN 200845
+            WHEN 201063 THEN 200853
+            WHEN 201064 THEN 200879
+            WHEN 201065 THEN 200883
+            WHEN 201066 THEN 200921
+            WHEN 201067 THEN 200980
+            WHEN 201068 THEN 200982
+            WHEN 201069 THEN 201002
+            WHEN 201070 THEN 201008
+            WHEN 201071 THEN 201022
+            WHEN 201072 THEN 201066
+            WHEN 201073 THEN 201079
+            WHEN 201074 THEN 201082
+            WHEN 201075 THEN 201120
+            WHEN 201076 THEN 201126
+            WHEN 201077 THEN 201152
+            WHEN 201078 THEN 201160
+            WHEN 201079 THEN 201243
+            WHEN 201080 THEN 201449
+            WHEN 201081 THEN 201454
+            WHEN 201082 THEN 201459
+            WHEN 201083 THEN 201463
+            WHEN 201084 THEN 201494
+            WHEN 201085 THEN 201495
+            WHEN 201086 THEN 201513
+            WHEN 201087 THEN 201515
+            WHEN 201088 THEN 201535
+            WHEN 201089 THEN 201715
+            WHEN 201090 THEN 201752
+            WHEN 201091 THEN 201766
+            WHEN 201092 THEN 201776
+            WHEN 201093 THEN 201784
+            WHEN 201094 THEN 201804
+            WHEN 201095 THEN 201943
+            WHEN 201096 THEN 201953
+            WHEN 201097 THEN 201966
+            WHEN 201098 THEN 201978
+            WHEN 201099 THEN 202006
+            WHEN 201100 THEN 202008
+            WHEN 201101 THEN 202050
+            WHEN 201102 THEN 202054
+            WHEN 201103 THEN 202061
+            WHEN 201104 THEN 202098
+            WHEN 201105 THEN 202120
+            WHEN 201106 THEN 202136
+            WHEN 201107 THEN 202457
+            WHEN 201108 THEN 202484
+            WHEN 201109 THEN 202565
+            WHEN 201110 THEN 202637
+            WHEN 201111 THEN 202641
+            WHEN 201112 THEN 202643
+            WHEN 201113 THEN 202645
+            WHEN 201114 THEN 202687
+            WHEN 201115 THEN 202947
+            WHEN 201116 THEN 202973
+            WHEN 201117 THEN 202974
+            WHEN 201118 THEN 202983
+            WHEN 201119 THEN 203044
+            WHEN 201120 THEN 203561
+            WHEN 201121 THEN 203562
+            WHEN 201122 THEN 203563
+            WHEN 201123 THEN 203567
+            WHEN 201124 THEN 203599
+            WHEN 201125 THEN 205116
+            WHEN 201126 THEN 205118
+            WHEN 201127 THEN 205143
+            WHEN 201128 THEN 205171
+            WHEN 201129 THEN 205176
+            WHEN 201130 THEN 205185
+            WHEN 201131 THEN 205211
+            WHEN 201132 THEN 205215
+            WHEN 201133 THEN 205229
+            WHEN 201134 THEN 205277
+            WHEN 201135 THEN 205394
+            WHEN 201136 THEN 205487
+            WHEN 201137 THEN 205502
+            WHEN 201138 THEN 205504
+            WHEN 201139 THEN 205676
+            WHEN 201140 THEN 205697
+            WHEN 201141 THEN 205730
+            WHEN 201142 THEN 205740
+            WHEN 201143 THEN 205782
+            WHEN 201144 THEN 205784
+            WHEN 201145 THEN 206197
+            WHEN 201146 THEN 206307
+            WHEN 201147 THEN 206343
+            WHEN 201148 THEN 206346
+            WHEN 201149 THEN 206673
+            WHEN 201150 THEN 206770
+            WHEN 201151 THEN 206795
+            WHEN 201152 THEN 206807
+            WHEN 201153 THEN 206991
+            WHEN 201154 THEN 207294
+            WHEN 201155 THEN 207328
+            WHEN 201156 THEN 207384
+            WHEN 201157 THEN 207386
+            WHEN 201158 THEN 208004
+            WHEN 201159 THEN 208017
+            WHEN 201160 THEN 208024
+            WHEN 201161 THEN 208033
+            WHEN 201162 THEN 208042
+            WHEN 201163 THEN 208050
+            WHEN 201164 THEN 208056
+            WHEN 201165 THEN 208071
+            WHEN 201166 THEN 208075
+            WHEN 201167 THEN 208092
+            WHEN 201168 THEN 208122
+            WHEN 201169 THEN 208143
+            WHEN 201170 THEN 208647
+            WHEN 201171 THEN 208676
+            WHEN 201172 THEN 208936
+            WHEN 201173 THEN 208946
+            WHEN 201174 THEN 209484
+            WHEN 201175 THEN 212051
+            WHEN 201176 THEN 213163
+            WHEN 201177 THEN 213165
+            WHEN 201178 THEN 213795
+            WHEN 201179 THEN 215237
+            WHEN 201180 THEN 216689
+            WHEN 201181 THEN 216857
+            WHEN 201182 THEN 218960
+            WHEN 201183 THEN 219740
+            WHEN 201184 THEN 219742
+            WHEN 201185 THEN 219750
+            WHEN 201186 THEN 219883
+            WHEN 201187 THEN 219884
+            WHEN 201188 THEN 220217
+            WHEN 201189 THEN 220230
+            WHEN 201190 THEN 220271
+            WHEN 201191 THEN 220484
+            WHEN 201192 THEN 220736
+            WHEN 201193 THEN 221084
+            WHEN 201194 THEN 225780
+            WHEN 201195 THEN 226573
+            WHEN 201196 THEN 231789
+            WHEN 201197 THEN 232271
+            WHEN 201198 THEN 232272
+            WHEN 201199 THEN 234074
+            WHEN 201200 THEN 234428
+            WHEN 201201 THEN 250769
+            WHEN 201202 THEN 251722
+            WHEN 201203 THEN 252127
+            WHEN 201204 THEN 253408
+            ELSE `offer_1`
+        END,
+
+    `offer_2` =
+
+    CASE `offer_2`
+            WHEN 201000 THEN 200100
+            WHEN 201001 THEN 202912
+            WHEN 201002 THEN 200116
+            WHEN 201003 THEN 200133
+            WHEN 201004 THEN 208921
+            WHEN 201005 THEN 200585
+            WHEN 201006 THEN 214914
+            WHEN 201007 THEN 200010
+            WHEN 201008 THEN 200017
+            WHEN 201009 THEN 200053
+            WHEN 201010 THEN 200071
+            WHEN 201011 THEN 200072
+            WHEN 201012 THEN 200078
+            WHEN 201013 THEN 200099
+            WHEN 201014 THEN 200118
+            WHEN 201015 THEN 200122
+            WHEN 201016 THEN 200130
+            WHEN 201017 THEN 200136
+            WHEN 201018 THEN 200139
+            WHEN 201019 THEN 200168
+            WHEN 201020 THEN 200172
+            WHEN 201021 THEN 200331
+            WHEN 201022 THEN 200339
+            WHEN 201023 THEN 200348
+            WHEN 201024 THEN 200355
+            WHEN 201025 THEN 200370
+            WHEN 201026 THEN 200403
+            WHEN 201027 THEN 200467
+            WHEN 201028 THEN 200475
+            WHEN 201029 THEN 200498
+            WHEN 201030 THEN 200526
+            WHEN 201031 THEN 200527
+            WHEN 201032 THEN 200528
+            WHEN 201033 THEN 200543
+            WHEN 201034 THEN 200586
+            WHEN 201035 THEN 200587
+            WHEN 201036 THEN 200588
+            WHEN 201037 THEN 200589
+            WHEN 201038 THEN 200604
+            WHEN 201039 THEN 200633
+            WHEN 201040 THEN 200635
+            WHEN 201041 THEN 200676
+            WHEN 201042 THEN 200686
+            WHEN 201043 THEN 200687
+            WHEN 201044 THEN 200688
+            WHEN 201045 THEN 200689
+            WHEN 201046 THEN 200693
+            WHEN 201047 THEN 200694
+            WHEN 201048 THEN 200697
+            WHEN 201049 THEN 200698
+            WHEN 201050 THEN 200702
+            WHEN 201051 THEN 200703
+            WHEN 201052 THEN 200706
+            WHEN 201053 THEN 200712
+            WHEN 201054 THEN 200755
+            WHEN 201055 THEN 200768
+            WHEN 201056 THEN 200770
+            WHEN 201057 THEN 200772
+            WHEN 201058 THEN 200774
+            WHEN 201059 THEN 200779
+            WHEN 201060 THEN 200781
+            WHEN 201061 THEN 200783
+            WHEN 201062 THEN 200845
+            WHEN 201063 THEN 200853
+            WHEN 201064 THEN 200879
+            WHEN 201065 THEN 200883
+            WHEN 201066 THEN 200921
+            WHEN 201067 THEN 200980
+            WHEN 201068 THEN 200982
+            WHEN 201069 THEN 201002
+            WHEN 201070 THEN 201008
+            WHEN 201071 THEN 201022
+            WHEN 201072 THEN 201066
+            WHEN 201073 THEN 201079
+            WHEN 201074 THEN 201082
+            WHEN 201075 THEN 201120
+            WHEN 201076 THEN 201126
+            WHEN 201077 THEN 201152
+            WHEN 201078 THEN 201160
+            WHEN 201079 THEN 201243
+            WHEN 201080 THEN 201449
+            WHEN 201081 THEN 201454
+            WHEN 201082 THEN 201459
+            WHEN 201083 THEN 201463
+            WHEN 201084 THEN 201494
+            WHEN 201085 THEN 201495
+            WHEN 201086 THEN 201513
+            WHEN 201087 THEN 201515
+            WHEN 201088 THEN 201535
+            WHEN 201089 THEN 201715
+            WHEN 201090 THEN 201752
+            WHEN 201091 THEN 201766
+            WHEN 201092 THEN 201776
+            WHEN 201093 THEN 201784
+            WHEN 201094 THEN 201804
+            WHEN 201095 THEN 201943
+            WHEN 201096 THEN 201953
+            WHEN 201097 THEN 201966
+            WHEN 201098 THEN 201978
+            WHEN 201099 THEN 202006
+            WHEN 201100 THEN 202008
+            WHEN 201101 THEN 202050
+            WHEN 201102 THEN 202054
+            WHEN 201103 THEN 202061
+            WHEN 201104 THEN 202098
+            WHEN 201105 THEN 202120
+            WHEN 201106 THEN 202136
+            WHEN 201107 THEN 202457
+            WHEN 201108 THEN 202484
+            WHEN 201109 THEN 202565
+            WHEN 201110 THEN 202637
+            WHEN 201111 THEN 202641
+            WHEN 201112 THEN 202643
+            WHEN 201113 THEN 202645
+            WHEN 201114 THEN 202687
+            WHEN 201115 THEN 202947
+            WHEN 201116 THEN 202973
+            WHEN 201117 THEN 202974
+            WHEN 201118 THEN 202983
+            WHEN 201119 THEN 203044
+            WHEN 201120 THEN 203561
+            WHEN 201121 THEN 203562
+            WHEN 201122 THEN 203563
+            WHEN 201123 THEN 203567
+            WHEN 201124 THEN 203599
+            WHEN 201125 THEN 205116
+            WHEN 201126 THEN 205118
+            WHEN 201127 THEN 205143
+            WHEN 201128 THEN 205171
+            WHEN 201129 THEN 205176
+            WHEN 201130 THEN 205185
+            WHEN 201131 THEN 205211
+            WHEN 201132 THEN 205215
+            WHEN 201133 THEN 205229
+            WHEN 201134 THEN 205277
+            WHEN 201135 THEN 205394
+            WHEN 201136 THEN 205487
+            WHEN 201137 THEN 205502
+            WHEN 201138 THEN 205504
+            WHEN 201139 THEN 205676
+            WHEN 201140 THEN 205697
+            WHEN 201141 THEN 205730
+            WHEN 201142 THEN 205740
+            WHEN 201143 THEN 205782
+            WHEN 201144 THEN 205784
+            WHEN 201145 THEN 206197
+            WHEN 201146 THEN 206307
+            WHEN 201147 THEN 206343
+            WHEN 201148 THEN 206346
+            WHEN 201149 THEN 206673
+            WHEN 201150 THEN 206770
+            WHEN 201151 THEN 206795
+            WHEN 201152 THEN 206807
+            WHEN 201153 THEN 206991
+            WHEN 201154 THEN 207294
+            WHEN 201155 THEN 207328
+            WHEN 201156 THEN 207384
+            WHEN 201157 THEN 207386
+            WHEN 201158 THEN 208004
+            WHEN 201159 THEN 208017
+            WHEN 201160 THEN 208024
+            WHEN 201161 THEN 208033
+            WHEN 201162 THEN 208042
+            WHEN 201163 THEN 208050
+            WHEN 201164 THEN 208056
+            WHEN 201165 THEN 208071
+            WHEN 201166 THEN 208075
+            WHEN 201167 THEN 208092
+            WHEN 201168 THEN 208122
+            WHEN 201169 THEN 208143
+            WHEN 201170 THEN 208647
+            WHEN 201171 THEN 208676
+            WHEN 201172 THEN 208936
+            WHEN 201173 THEN 208946
+            WHEN 201174 THEN 209484
+            WHEN 201175 THEN 212051
+            WHEN 201176 THEN 213163
+            WHEN 201177 THEN 213165
+            WHEN 201178 THEN 213795
+            WHEN 201179 THEN 215237
+            WHEN 201180 THEN 216689
+            WHEN 201181 THEN 216857
+            WHEN 201182 THEN 218960
+            WHEN 201183 THEN 219740
+            WHEN 201184 THEN 219742
+            WHEN 201185 THEN 219750
+            WHEN 201186 THEN 219883
+            WHEN 201187 THEN 219884
+            WHEN 201188 THEN 220217
+            WHEN 201189 THEN 220230
+            WHEN 201190 THEN 220271
+            WHEN 201191 THEN 220484
+            WHEN 201192 THEN 220736
+            WHEN 201193 THEN 221084
+            WHEN 201194 THEN 225780
+            WHEN 201195 THEN 226573
+            WHEN 201196 THEN 231789
+            WHEN 201197 THEN 232271
+            WHEN 201198 THEN 232272
+            WHEN 201199 THEN 234074
+            WHEN 201200 THEN 234428
+            WHEN 201201 THEN 250769
+            WHEN 201202 THEN 251722
+            WHEN 201203 THEN 252127
+            WHEN 201204 THEN 253408
+            ELSE `offer_2`
+        END,
+
+    `offer_3` =
+
+    CASE `offer_3`
+            WHEN 201000 THEN 200100
+            WHEN 201001 THEN 202912
+            WHEN 201002 THEN 200116
+            WHEN 201003 THEN 200133
+            WHEN 201004 THEN 208921
+            WHEN 201005 THEN 200585
+            WHEN 201006 THEN 214914
+            WHEN 201007 THEN 200010
+            WHEN 201008 THEN 200017
+            WHEN 201009 THEN 200053
+            WHEN 201010 THEN 200071
+            WHEN 201011 THEN 200072
+            WHEN 201012 THEN 200078
+            WHEN 201013 THEN 200099
+            WHEN 201014 THEN 200118
+            WHEN 201015 THEN 200122
+            WHEN 201016 THEN 200130
+            WHEN 201017 THEN 200136
+            WHEN 201018 THEN 200139
+            WHEN 201019 THEN 200168
+            WHEN 201020 THEN 200172
+            WHEN 201021 THEN 200331
+            WHEN 201022 THEN 200339
+            WHEN 201023 THEN 200348
+            WHEN 201024 THEN 200355
+            WHEN 201025 THEN 200370
+            WHEN 201026 THEN 200403
+            WHEN 201027 THEN 200467
+            WHEN 201028 THEN 200475
+            WHEN 201029 THEN 200498
+            WHEN 201030 THEN 200526
+            WHEN 201031 THEN 200527
+            WHEN 201032 THEN 200528
+            WHEN 201033 THEN 200543
+            WHEN 201034 THEN 200586
+            WHEN 201035 THEN 200587
+            WHEN 201036 THEN 200588
+            WHEN 201037 THEN 200589
+            WHEN 201038 THEN 200604
+            WHEN 201039 THEN 200633
+            WHEN 201040 THEN 200635
+            WHEN 201041 THEN 200676
+            WHEN 201042 THEN 200686
+            WHEN 201043 THEN 200687
+            WHEN 201044 THEN 200688
+            WHEN 201045 THEN 200689
+            WHEN 201046 THEN 200693
+            WHEN 201047 THEN 200694
+            WHEN 201048 THEN 200697
+            WHEN 201049 THEN 200698
+            WHEN 201050 THEN 200702
+            WHEN 201051 THEN 200703
+            WHEN 201052 THEN 200706
+            WHEN 201053 THEN 200712
+            WHEN 201054 THEN 200755
+            WHEN 201055 THEN 200768
+            WHEN 201056 THEN 200770
+            WHEN 201057 THEN 200772
+            WHEN 201058 THEN 200774
+            WHEN 201059 THEN 200779
+            WHEN 201060 THEN 200781
+            WHEN 201061 THEN 200783
+            WHEN 201062 THEN 200845
+            WHEN 201063 THEN 200853
+            WHEN 201064 THEN 200879
+            WHEN 201065 THEN 200883
+            WHEN 201066 THEN 200921
+            WHEN 201067 THEN 200980
+            WHEN 201068 THEN 200982
+            WHEN 201069 THEN 201002
+            WHEN 201070 THEN 201008
+            WHEN 201071 THEN 201022
+            WHEN 201072 THEN 201066
+            WHEN 201073 THEN 201079
+            WHEN 201074 THEN 201082
+            WHEN 201075 THEN 201120
+            WHEN 201076 THEN 201126
+            WHEN 201077 THEN 201152
+            WHEN 201078 THEN 201160
+            WHEN 201079 THEN 201243
+            WHEN 201080 THEN 201449
+            WHEN 201081 THEN 201454
+            WHEN 201082 THEN 201459
+            WHEN 201083 THEN 201463
+            WHEN 201084 THEN 201494
+            WHEN 201085 THEN 201495
+            WHEN 201086 THEN 201513
+            WHEN 201087 THEN 201515
+            WHEN 201088 THEN 201535
+            WHEN 201089 THEN 201715
+            WHEN 201090 THEN 201752
+            WHEN 201091 THEN 201766
+            WHEN 201092 THEN 201776
+            WHEN 201093 THEN 201784
+            WHEN 201094 THEN 201804
+            WHEN 201095 THEN 201943
+            WHEN 201096 THEN 201953
+            WHEN 201097 THEN 201966
+            WHEN 201098 THEN 201978
+            WHEN 201099 THEN 202006
+            WHEN 201100 THEN 202008
+            WHEN 201101 THEN 202050
+            WHEN 201102 THEN 202054
+            WHEN 201103 THEN 202061
+            WHEN 201104 THEN 202098
+            WHEN 201105 THEN 202120
+            WHEN 201106 THEN 202136
+            WHEN 201107 THEN 202457
+            WHEN 201108 THEN 202484
+            WHEN 201109 THEN 202565
+            WHEN 201110 THEN 202637
+            WHEN 201111 THEN 202641
+            WHEN 201112 THEN 202643
+            WHEN 201113 THEN 202645
+            WHEN 201114 THEN 202687
+            WHEN 201115 THEN 202947
+            WHEN 201116 THEN 202973
+            WHEN 201117 THEN 202974
+            WHEN 201118 THEN 202983
+            WHEN 201119 THEN 203044
+            WHEN 201120 THEN 203561
+            WHEN 201121 THEN 203562
+            WHEN 201122 THEN 203563
+            WHEN 201123 THEN 203567
+            WHEN 201124 THEN 203599
+            WHEN 201125 THEN 205116
+            WHEN 201126 THEN 205118
+            WHEN 201127 THEN 205143
+            WHEN 201128 THEN 205171
+            WHEN 201129 THEN 205176
+            WHEN 201130 THEN 205185
+            WHEN 201131 THEN 205211
+            WHEN 201132 THEN 205215
+            WHEN 201133 THEN 205229
+            WHEN 201134 THEN 205277
+            WHEN 201135 THEN 205394
+            WHEN 201136 THEN 205487
+            WHEN 201137 THEN 205502
+            WHEN 201138 THEN 205504
+            WHEN 201139 THEN 205676
+            WHEN 201140 THEN 205697
+            WHEN 201141 THEN 205730
+            WHEN 201142 THEN 205740
+            WHEN 201143 THEN 205782
+            WHEN 201144 THEN 205784
+            WHEN 201145 THEN 206197
+            WHEN 201146 THEN 206307
+            WHEN 201147 THEN 206343
+            WHEN 201148 THEN 206346
+            WHEN 201149 THEN 206673
+            WHEN 201150 THEN 206770
+            WHEN 201151 THEN 206795
+            WHEN 201152 THEN 206807
+            WHEN 201153 THEN 206991
+            WHEN 201154 THEN 207294
+            WHEN 201155 THEN 207328
+            WHEN 201156 THEN 207384
+            WHEN 201157 THEN 207386
+            WHEN 201158 THEN 208004
+            WHEN 201159 THEN 208017
+            WHEN 201160 THEN 208024
+            WHEN 201161 THEN 208033
+            WHEN 201162 THEN 208042
+            WHEN 201163 THEN 208050
+            WHEN 201164 THEN 208056
+            WHEN 201165 THEN 208071
+            WHEN 201166 THEN 208075
+            WHEN 201167 THEN 208092
+            WHEN 201168 THEN 208122
+            WHEN 201169 THEN 208143
+            WHEN 201170 THEN 208647
+            WHEN 201171 THEN 208676
+            WHEN 201172 THEN 208936
+            WHEN 201173 THEN 208946
+            WHEN 201174 THEN 209484
+            WHEN 201175 THEN 212051
+            WHEN 201176 THEN 213163
+            WHEN 201177 THEN 213165
+            WHEN 201178 THEN 213795
+            WHEN 201179 THEN 215237
+            WHEN 201180 THEN 216689
+            WHEN 201181 THEN 216857
+            WHEN 201182 THEN 218960
+            WHEN 201183 THEN 219740
+            WHEN 201184 THEN 219742
+            WHEN 201185 THEN 219750
+            WHEN 201186 THEN 219883
+            WHEN 201187 THEN 219884
+            WHEN 201188 THEN 220217
+            WHEN 201189 THEN 220230
+            WHEN 201190 THEN 220271
+            WHEN 201191 THEN 220484
+            WHEN 201192 THEN 220736
+            WHEN 201193 THEN 221084
+            WHEN 201194 THEN 225780
+            WHEN 201195 THEN 226573
+            WHEN 201196 THEN 231789
+            WHEN 201197 THEN 232271
+            WHEN 201198 THEN 232272
+            WHEN 201199 THEN 234074
+            WHEN 201200 THEN 234428
+            WHEN 201201 THEN 250769
+            WHEN 201202 THEN 251722
+            WHEN 201203 THEN 252127
+            WHEN 201204 THEN 253408
+            ELSE `offer_3`
+        END;
+
+DROP TEMPORARY TABLE IF EXISTS `tmp_spelldraft_character_spell`;
+DROP TEMPORARY TABLE IF EXISTS `tmp_spelldraft_drafted`;
+DROP TEMPORARY TABLE IF EXISTS `tmp_spelldraft_banned`;
+DROP TEMPORARY TABLE IF EXISTS `tmp_spelldraft_id_map`;
+
+COMMIT;

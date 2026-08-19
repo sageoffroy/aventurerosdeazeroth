@@ -51,8 +51,8 @@ def load_aliases(resolved_path: Path) -> list[tuple[int, int]]:
         except (KeyError, TypeError, ValueError) as exc:
             raise GrimoirePatchError(f"{resolved_path}: malformed spells[{index}]") from exc
 
-        if not 201000 <= custom_id <= 201999:
-            raise GrimoirePatchError(f"custom spell ID outside 201000-201999: {custom_id}")
+        if not 200000 <= custom_id <= 299999:
+            raise GrimoirePatchError(f"custom spell ID outside 200000-299999: {custom_id}")
         if custom_id in custom_ids:
             raise GrimoirePatchError(f"duplicate custom spell ID: {custom_id}")
         custom_ids.add(custom_id)

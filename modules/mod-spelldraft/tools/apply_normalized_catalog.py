@@ -62,8 +62,8 @@ def load_replacements(path: Path) -> dict[int, dict[str, object]]:
             raise ReplaceError(f"spells[{index}] must be an object")
         custom_id = int(spell["id"])
         source = int(spell["clone_from"])
-        if not 201000 <= custom_id <= 201999:
-            raise ReplaceError(f"custom spell {custom_id} is outside 201000-201999")
+        if not 200000 <= custom_id <= 299999:
+            raise ReplaceError(f"custom spell {custom_id} is outside 200000-299999")
         if source in replacements:
             raise ReplaceError(f"native root {source} is replaced more than once")
         if custom_id in custom_ids:

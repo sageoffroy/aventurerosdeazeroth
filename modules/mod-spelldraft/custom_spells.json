@@ -1,53 +1,28 @@
 {
   "version": 2,
-  "custom_id_range": [201000, 201999],
+  "custom_id_range": [
+    200000,
+    299999
+  ],
+  "custom_id_offset": 200000,
   "runtime_max_level": 60,
   "selection": {
     "mode": "current_spelldraft_roots",
     "max_first_rank_level": 20,
-    "exclude_classes": ["DEATHKNIGHT"],
+    "exclude_classes": [
+      "DEATHKNIGHT"
+    ],
     "include_talents": false,
-    "description": "Normalize every currently draftable non-talent class ability whose first rank is learned at level 20 or earlier. The native rank family is kept as profile/anchor source data and is replaced by one 201xxx card."
+    "description": "Normalize every currently draftable non-talent class ability whose first rank is learned at level 20 or earlier. The native rank family is kept as profile/anchor source data and is replaced by one deterministic custom card using custom_id = 200000 + native_root."
   },
   "pinned": [
     {
-      "id": 201000,
       "clone_from": 100,
       "label": "Charge without stance restriction",
       "changes": {
         "stance_mask": 0,
         "stance_exclude": 0
       }
-    },
-    {
-      "id": 201001,
-      "clone_from": 2912,
-      "label": "Starfire normalized"
-    },
-    {
-      "id": 201002,
-      "clone_from": 116,
-      "label": "Frostbolt normalized"
-    },
-    {
-      "id": 201003,
-      "clone_from": 133,
-      "label": "Fireball normalized"
-    },
-    {
-      "id": 201004,
-      "clone_from": 8921,
-      "label": "Moonfire normalized"
-    },
-    {
-      "id": 201005,
-      "clone_from": 585,
-      "label": "Smite normalized"
-    },
-    {
-      "id": 201006,
-      "clone_from": 14914,
-      "label": "Holy Fire normalized"
     }
   ],
   "scaling": {

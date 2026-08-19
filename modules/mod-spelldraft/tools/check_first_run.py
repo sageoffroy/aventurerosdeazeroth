@@ -165,7 +165,7 @@ def resolved_replacements(path: Path) -> tuple[bool, dict[int, int]]:
             class_name = str(spell["class"])
         except (KeyError, TypeError, ValueError):
             return False, {}
-        if not 201000 <= custom_id <= 201999:
+        if not 200000 <= custom_id <= 299999:
             return False, {}
         if source in replacements or custom_id in replacements.values():
             return False, {}
@@ -178,7 +178,7 @@ def resolved_replacements(path: Path) -> tuple[bool, dict[int, int]]:
     }
     if "DEATHKNIGHT" in classes or not expected_classes.issubset(classes):
         return False, {}
-    if replacements.get(116) != 201002:
+    if replacements.get(116) != 200116:
         return False, {}
     return True, replacements
 
@@ -287,10 +287,10 @@ def main() -> None:
     if scaling_ok:
         scaling_text = scaling_path.read_text(encoding="utf-8", errors="replace")
         scaling_ok = (
-            "201002 1 " in scaling_text
-            and "201002 20 " in scaling_text
-            and "201002 60 " in scaling_text
-            and "201002 61 " not in scaling_text
+            "200116 1 " in scaling_text
+            and "200116 20 " in scaling_text
+            and "200116 60 " in scaling_text
+            and "200116 61 " not in scaling_text
         )
     print(f"  [{mark(resolved_ok)}] custom spells resueltos: {resolved_path}")
     print(f"  [{mark(scaling_ok)}] scaling 1-60 runtime: {scaling_path}")

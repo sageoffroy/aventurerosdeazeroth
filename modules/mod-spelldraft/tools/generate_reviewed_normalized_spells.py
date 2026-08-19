@@ -19,8 +19,8 @@ from pathlib import Path
 import generate_normalized_spells as generator
 from reviewed_spell_exclusions import ExclusionError, load_excluded_spell_ids
 
-CUSTOM_MIN = 201000
-CUSTOM_MAX = 201999
+CUSTOM_MIN = 200000
+CUSTOM_MAX = 299999
 
 
 def argument_path(name: str) -> Path:

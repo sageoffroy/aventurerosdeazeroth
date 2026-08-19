@@ -159,8 +159,8 @@ def parse_resolved(
             source_id = int(spell["clone_from"])
         except (KeyError, TypeError, ValueError) as exc:
             raise TooltipPatchError(f"{resolved_path}: malformed spells[{index}]") from exc
-        if not 201000 <= spell_id <= 201999:
-            raise TooltipPatchError(f"custom spell ID outside 201000-201999: {spell_id}")
+        if not 200000 <= spell_id <= 299999:
+            raise TooltipPatchError(f"custom spell ID outside 200000-299999: {spell_id}")
         if spell_id in seen:
             raise TooltipPatchError(f"duplicate custom spell ID: {spell_id}")
         seen.add(spell_id)

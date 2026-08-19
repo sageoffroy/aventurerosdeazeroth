@@ -95,7 +95,7 @@ def load_runtime(path: Path) -> dict[int, dict[int, RuntimeRow]]:
         except ValueError as exc:
             raise ValidateError(f"{path}:{line_number}: malformed TSV v2 row") from exc
 
-        if not 201000 <= spell_id <= 201999 or level <= 0 or cast_ms < 0 or duration_ms < 0:
+        if not 200000 <= spell_id <= 299999 or level <= 0 or cast_ms < 0 or duration_ms < 0:
             raise ValidateError(f"{path}:{line_number}: invalid spell/level/cast/duration")
         levels = result.setdefault(spell_id, {})
         if level in levels:

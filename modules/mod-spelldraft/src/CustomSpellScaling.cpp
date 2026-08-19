@@ -175,7 +175,7 @@ bool LoadScalingFile(std::string const& path)
                 return false;
             }
 
-            if (spellId < 201000 || spellId > 201999 || level == 0 || level > 255
+            if (spellId < 200000 || spellId > 299999 || level == 0 || level > 255
                 || castTimeMs < 0 || durationMs < 0)
             {
                 LOG_ERROR(
