@@ -65,14 +65,18 @@ def print_spell(spell: dict[str, Any]) -> None:
         raise ReportError(f"custom spell {spell_id} has no anchors")
 
     print(f"{spell_id} {name} <- {source_id} | profile={profile}")
-    print("| Nivel | Spell nativo | Daño directo | DoT total | Duración | Tick | Cast |")
-    print("|---:|---:|---:|---:|---:|---:|---:|")
+    print(
+        "| Nivel | Spell nativo | Daño directo | DoT/tick | DoT total | "
+        "Duración | Cada | Cast |"
+    )
+    print("|---:|---:|---:|---:|---:|---:|---:|---:|")
     for anchor in anchors:
         if not isinstance(anchor, dict):
             continue
         print(
             f"| {int(anchor['level'])} | {int(anchor['source_spell_id'])} | "
-            f"{amount_text(anchor, 'direct')} | {amount_text(anchor, 'dot_total')} | "
+            f"{amount_text(anchor, 'direct')} | {amount_text(anchor, 'dot_tick')} | "
+            f"{amount_text(anchor, 'dot_total')} | "
             f"{seconds_text(anchor.get('duration_ms'))} | "
             f"{seconds_text(anchor.get('tick_ms'))} | "
             f"{seconds_text(anchor.get('cast_ms'))} |"
