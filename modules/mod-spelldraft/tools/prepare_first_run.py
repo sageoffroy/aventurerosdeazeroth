@@ -195,6 +195,24 @@ def main() -> None:
         str(normalized_resolved),
     )
 
+    # Client spell descriptions cannot see the server-side TSV. Generate only
+    # the native rank anchors already preserved in custom_spells.resolved.json
+    # and interpolate them in Lua. The tool first proves those anchors reproduce
+    # every server TSV level exactly, then removes the legacy 60-row curve files
+    # from the addon's load order.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "patch_spelldraft_scaled_tooltips.py"),
+        "--client-dir",
+        str(client),
+        "--resolved",
+        str(normalized_resolved),
+        "--scaling",
+        str(normalized_scaling),
+        "--dbc-dir",
+        str(dbc_src),
+    )
+
     # The stock 3.3.5a client does not expose native combo-point packet state to
     # GetComboPoints() for custom class ID 10. Install the client half of the
     # authoritative server combo bridge while keeping Blizzard's ComboFrame.
@@ -259,6 +277,7 @@ def main() -> None:
     print("Reviewed early-game native spell families replaced by normalized 201xxx cards.")
     print("Reviewed talent/internal false roots removed from the draft catalog.")
     print("Normalized 201xxx metadata aliases installed for the SpellDraft Grimoire.")
+    print("Compact native-rank tooltip anchors installed; legacy 60-row client curves disabled.")
     print("Adventurer combo-point client compatibility installed for Blizzard ComboFrame.")
     print("No se inicio MySQL, authserver ni worldserver.")
     print("No fue necesario recompilar el core para preparar los datos/cliente.")
