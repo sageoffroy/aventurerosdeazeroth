@@ -45,5 +45,25 @@
       "cast_time"
     ],
     "notes": "Native WoW ranks are semantic anchors. Specialized profiles keep fields with their real meaning instead of treating every effect as an anonymous min/max pair. Periodic damage is interpolated as the integer per-tick value AzerothCore actually executes; the visible total is always derived from that tick amount and the runtime tick count, so server and tooltip cannot diverge through integer division. Native anchors also retain dot_total as a reference invariant and must reproduce it exactly. Missing player levels are interpolated. Generic effect curves remain as a fallback for profiles not specialized yet. Spell power, crit, haste, buffs/debuffs and target modifiers remain normal AzerothCore mechanics and are not baked into the base level curves."
+  },
+  "balance_overrides": {
+    "686": {
+      "label": "Shadow Bolt volatile nuke",
+      "direct_range_spread_multiplier": 3.5,
+      "notes": "Preserve average damage while making Shadow Bolt the most volatile casted nuke."
+    },
+    "348": {
+      "label": "Immolate persistent damage",
+      "periodic_multiplier": 1.1,
+      "notes": "Keep initial impact unchanged and raise periodic damage slightly."
+    },
+    "585": {
+      "label": "Smite late-game Holy lift",
+      "direct_multiplier_from_level": {
+        "level": 61,
+        "multiplier": 1.05
+      },
+      "notes": "Small late-game direct-damage increase; level 60 approaches the +5% anchor through interpolation."
+    }
   }
 }

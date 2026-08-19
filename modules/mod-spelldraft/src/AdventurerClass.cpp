@@ -286,8 +286,40 @@ public:
     {
         PLAYERHOOK_ON_CREATE,
         PLAYERHOOK_ON_LOGIN,
-        PLAYERHOOK_ON_UPDATE
+        PLAYERHOOK_ON_UPDATE,
+        PLAYERHOOK_ON_BEFORE_UPDATE_ATTACK_POWER_AND_DAMAGE
     }) {}
+
+    void OnPlayerBeforeUpdateAttackPowerAndDamage(
+        Player* player,
+        float& level,
+        float& val2,
+        bool ranged) override
+    {
+        if (!sConfigMgr->GetOption<bool>("SpellDraft.Enable", true))
+            return;
+        if (!IsAdventurer(player))
+            return;
+
+        if (ranged)
+        {
+            // Adventurer ranged baseline: Hunter-style progression.
+            // Agility remains the ranged physical stat while level provides
+            // the baseline growth expected by weapon damage at higher levels.
+            val2 = level * 2.0f
+                + player->GetStat(STAT_AGILITY)
+                - 10.0f;
+        }
+        else
+        {
+            // Adventurer melee baseline: hybrid physical progression.
+            // Both Strength and Agility remain viable for classless builds.
+            val2 = level * 2.0f
+                + player->GetStat(STAT_STRENGTH)
+                + player->GetStat(STAT_AGILITY)
+                - 20.0f;
+        }
+    }
 
     void OnPlayerCreate(Player* player) override
     {

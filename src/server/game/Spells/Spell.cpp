@@ -64,6 +64,18 @@
 
 extern pEffect SpellEffects[TOTAL_SPELL_EFFECTS];
 
+using AventurerosCustomSpellCastTimeResolver = int32 (*)(Player const*, uint32, int32);
+
+namespace
+{
+AventurerosCustomSpellCastTimeResolver g_AventurerosCustomSpellCastTimeResolver = nullptr;
+}
+
+void SetAventurerosCustomSpellCastTimeResolver(AventurerosCustomSpellCastTimeResolver resolver)
+{
+    g_AventurerosCustomSpellCastTimeResolver = resolver;
+}
+
 SpellDestination::SpellDestination()
 {
     _position.Relocate(0, 0, 0, 0);
@@ -3554,7 +3566,31 @@ SpellCastResult Spell::prepare(SpellCastTargets const* targets, AuraEffect const
     prepareDataForTriggerSystem(triggeredByAura);
 
     // calculate cast time (calculated after first CheckCast check to prevent charge counting for first CheckCast fail)
-    m_casttime = HasTriggeredCastFlag(TRIGGERED_CAST_DIRECTLY) ? 0 : m_spellInfo->CalcCastTime(m_caster, this);
+    if (HasTriggeredCastFlag(TRIGGERED_CAST_DIRECTLY))
+        m_casttime = 0;
+    else
+    {
+        int32 customBaseCastTime = -1;
+        if (g_AventurerosCustomSpellCastTimeResolver)
+        {
+            if (Player* playerCaster = m_caster->ToPlayer())
+            {
+                customBaseCastTime = g_AventurerosCustomSpellCastTimeResolver(
+                    playerCaster, m_spellInfo->Id, -1);
+            }
+        }
+
+        if (customBaseCastTime >= 0)
+        {
+            m_casttime = customBaseCastTime;
+            if (m_spellInfo->HasAttribute(SPELL_ATTR0_USES_RANGED_SLOT)
+                && !m_spellInfo->IsAutoRepeatRangedSpell())
+                m_casttime += 500;
+            m_caster->ModSpellCastTime(m_spellInfo, m_casttime, this);
+        }
+        else
+            m_casttime = m_spellInfo->CalcCastTime(m_caster, this);
+    }
 
     if (m_caster->IsPlayer())
         if (m_caster->ToPlayer()->GetCommandStatus(CHEAT_CASTTIME))

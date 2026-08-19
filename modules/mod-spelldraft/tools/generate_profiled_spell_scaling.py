@@ -165,6 +165,94 @@ def profile_low_level_offset(registry: dict[str, Any]) -> float:
         raise ProfileError("custom spell registry scaling.low_level_offset is invalid") from exc
 
 
+
+def load_balance_overrides(registry: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    raw = registry.get("balance_overrides", {})
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise ProfileError("custom spell registry balance_overrides must be an object")
+
+    result: dict[int, dict[str, Any]] = {}
+    for raw_root, value in raw.items():
+        try:
+            root = int(raw_root)
+        except (TypeError, ValueError) as exc:
+            raise ProfileError(f"invalid balance override root: {raw_root}") from exc
+
+        if not isinstance(value, dict):
+            raise ProfileError(f"balance override {root} must be an object")
+
+        result[root] = value
+
+    return result
+
+
+def round_amount(value: float) -> int:
+    if value >= 0:
+        return int(math.floor(value + 0.5))
+    return -int(math.floor(abs(value) + 0.5))
+
+
+def scale_amount_range(amount: AmountRange, multiplier: float) -> AmountRange:
+    if multiplier <= 0:
+        raise ProfileError(f"invalid damage multiplier {multiplier}")
+
+    minimum = round_amount(amount.minimum * multiplier)
+    maximum = round_amount(amount.maximum * multiplier)
+
+    return AmountRange(min(minimum, maximum), max(minimum, maximum))
+
+
+def spread_amount_range(amount: AmountRange, multiplier: float) -> AmountRange:
+    if multiplier <= 0:
+        raise ProfileError(f"invalid range-spread multiplier {multiplier}")
+
+    center = (amount.minimum + amount.maximum) / 2.0
+    half_width = (amount.maximum - amount.minimum) * multiplier / 2.0
+
+    minimum = round_amount(center - half_width)
+    maximum = round_amount(center + half_width)
+
+    return AmountRange(min(minimum, maximum), max(minimum, maximum))
+
+
+def balanced_effect_range(
+    rank: NativeRank,
+    effect_index: int,
+    role: str,
+    balance: dict[str, Any],
+) -> AmountRange:
+    amount = effect_range(rank.row, effect_index)
+
+    if role == "direct":
+        multiplier = float(balance.get("direct_multiplier", 1.0))
+        if multiplier != 1.0:
+            amount = scale_amount_range(amount, multiplier)
+
+        late = balance.get("direct_multiplier_from_level")
+        if late is not None:
+            if not isinstance(late, dict):
+                raise ProfileError("direct_multiplier_from_level must be an object")
+
+            from_level = int(late["level"])
+            late_multiplier = float(late["multiplier"])
+
+            if rank.level >= from_level:
+                amount = scale_amount_range(amount, late_multiplier)
+
+        spread = float(balance.get("direct_range_spread_multiplier", 1.0))
+        if spread != 1.0:
+            amount = spread_amount_range(amount, spread)
+
+    elif role == "periodic":
+        multiplier = float(balance.get("periodic_multiplier", 1.0))
+        if multiplier != 1.0:
+            amount = scale_amount_range(amount, multiplier)
+
+    return amount
+
+
 def native_ranks(
     spec: dict[str, Any],
     spell_rows: dict[int, bytearray],
@@ -233,6 +321,7 @@ def semantic_anchors(
     ranks: list[NativeRank],
     direct_index: int | None,
     periodic_index: int | None,
+    balance: dict[str, Any],
 ) -> list[dict[str, Any]]:
     anchors: list[dict[str, Any]] = []
     for rank in ranks:
@@ -244,11 +333,11 @@ def semantic_anchors(
         }
 
         if direct_index is not None:
-            direct = effect_range(rank.row, direct_index)
+            direct = balanced_effect_range(rank, direct_index, "direct", balance)
             entry["direct"] = {"min": direct.minimum, "max": direct.maximum}
 
         if periodic_index is not None:
-            per_tick = effect_range(rank.row, periodic_index)
+            per_tick = balanced_effect_range(rank, periodic_index, "periodic", balance)
             amplitude_ms = u32(rank.row, EFFECT_AMPLITUDE + periodic_index)
             if amplitude_ms <= 0:
                 raise ProfileError(
@@ -281,6 +370,7 @@ def build_profile_runtime(
     resolved_effects: list[dict[str, Any]],
     max_level: int,
     low_level_offset: float,
+    balance: dict[str, Any],
 ) -> tuple[list[RuntimeLevel], list[dict[str, Any]]]:
     cast_levels = interpolate_scalar(
         [(rank.level, rank.cast_ms) for rank in ranks], max_level, 100
@@ -288,7 +378,7 @@ def build_profile_runtime(
     duration_levels = interpolate_scalar(
         [(rank.level, rank.duration_ms) for rank in ranks], max_level, 1000
     )
-    semantic = semantic_anchors(ranks, direct_index, periodic_index)
+    semantic = semantic_anchors(ranks, direct_index, periodic_index, balance)
 
     effect_levels: dict[int, tuple[AmountRange, ...]] = {}
     for effect in resolved_effects:
@@ -311,7 +401,13 @@ def build_profile_runtime(
 
     if direct_index is not None:
         effect_levels[direct_index] = amount_levels(
-            [(rank.level, effect_range(rank.row, direct_index)) for rank in ranks],
+            [
+                (
+                    rank.level,
+                    balanced_effect_range(rank, direct_index, "direct", balance),
+                )
+                for rank in ranks
+            ],
             max_level,
             low_level_offset,
         )
@@ -321,7 +417,13 @@ def build_profile_runtime(
     # cannot be represented by an integer amount repeated N times.
     if periodic_index is not None:
         effect_levels[periodic_index] = amount_levels(
-            [(rank.level, effect_range(rank.row, periodic_index)) for rank in ranks],
+            [
+                (
+                    rank.level,
+                    balanced_effect_range(rank, periodic_index, "periodic", balance),
+                )
+                for rank in ranks
+            ],
             max_level,
             low_level_offset,
         )
@@ -406,6 +508,7 @@ def main() -> None:
             raise ProfileError("resolved registry has invalid runtime_max_level/spells")
 
         low_level_offset = profile_low_level_offset(registry)
+        balance_by_root = load_balance_overrides(registry)
         _fields, _size, _records, _strings, _trailing, spell_rows = rows_by_id(
             dbc_dir / "Spell.dbc"
         )
@@ -421,6 +524,7 @@ def main() -> None:
                 raise ProfileError("resolved spells list contains a non-object")
             custom_id = int(raw_spec["id"])
             source_id = int(raw_spec["clone_from"])
+            balance = balance_by_root.get(source_id, {})
             ranks = native_ranks(raw_spec, spell_rows, casts, durations)
             profile, direct_index, periodic_index = detect_profile(ranks)
             runtime, semantic = build_profile_runtime(
@@ -432,6 +536,7 @@ def main() -> None:
                 else [],
                 max_level,
                 low_level_offset,
+                balance,
             )
             runtime_by_spell[custom_id] = runtime
             profile_counts[profile] = profile_counts.get(profile, 0) + 1
@@ -443,6 +548,8 @@ def main() -> None:
                 "profile": profile,
                 "anchors": semantic,
             }
+            if balance:
+                item["balance"] = balance
             if direct_index is not None:
                 item["direct_effect_index"] = direct_index
             if periodic_index is not None:
