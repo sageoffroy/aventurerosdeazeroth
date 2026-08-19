@@ -134,7 +134,10 @@ def rows_by_id(path: Path):
 
 
 def load_scaling(path: Path):
-    result: dict[tuple[int, int], tuple[int, list[tuple[int, int] | None]]] = {}
+    result: dict[
+        tuple[int, int],
+        tuple[int, int, list[tuple[int, int] | None]],
+    ] = {}
     if not path.is_file():
         return result
     for raw in path.read_text(encoding="utf-8").splitlines():
@@ -142,17 +145,24 @@ def load_scaling(path: Path):
         if not raw or raw.startswith("#"):
             continue
         parts = raw.split()
-        if len(parts) != 9:
+        if len(parts) == 9:
+            cast_ms = -1
+            duration = int(parts[2])
+            effect_offset = 3
+        elif len(parts) == 10:
+            cast_ms = int(parts[2])
+            duration = int(parts[3])
+            effect_offset = 4
+        else:
             continue
         spell_id = int(parts[0])
         level = int(parts[1])
-        duration = int(parts[2])
         effects: list[tuple[int, int] | None] = []
         for index in range(3):
-            lo = parts[3 + index * 2]
-            hi = parts[4 + index * 2]
+            lo = parts[effect_offset + index * 2]
+            hi = parts[effect_offset + index * 2 + 1]
             effects.append(None if lo == "x" else (int(lo), int(hi)))
-        result[(spell_id, level)] = (duration, effects)
+        result[(spell_id, level)] = (cast_ms, duration, effects)
     return result
 
 
@@ -261,20 +271,22 @@ def main() -> None:
             range_text = "0m"
 
         cast_row = casts.get(u32(row, CAST_TIME_INDEX))
-        cast_ms = i32(cast_row, 1) if cast_row else 0
-        cast_text = format_seconds(cast_ms)
+        native_cast_ms = i32(cast_row, 1) if cast_row else 0
 
         scaling_row = scaling.get((spell_id, args.level))
         if scaling_row:
-            runtime_duration, runtime_effects = scaling_row
+            runtime_cast, runtime_duration, runtime_effects = scaling_row
+            cast_ms = runtime_cast if runtime_cast >= 0 else native_cast_ms
             runtime_values = []
             for index, amount in enumerate(runtime_effects):
                 if amount is not None:
                     runtime_values.append(f"e{index}={amount[0]}-{amount[1]}")
             runtime_text = ", ".join(runtime_values) if runtime_values else "-"
         else:
+            cast_ms = native_cast_ms
             runtime_duration = 0
             runtime_text = "-"
+        cast_text = format_seconds(cast_ms)
 
         duration_row = durations.get(u32(row, DURATION_INDEX))
         native_duration = abs(i32(duration_row, 1)) if duration_row else 0
