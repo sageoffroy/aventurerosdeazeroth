@@ -28,6 +28,7 @@ struct EffectRange
 struct LevelRule
 {
     bool present = false;
+    int32 castTimeMs = 0;
     int32 durationMs = 0;
     std::array<EffectRange, 3> effects{};
 };
@@ -80,6 +81,29 @@ bool ParseEffectRange(
     return true;
 }
 
+LevelRule const* FindLevelRule(Player const* player, uint32 spellId)
+{
+    if (!g_customScalingEnabled || !player)
+        return nullptr;
+
+    auto const spellItr = g_customScaling.find(spellId);
+    if (spellItr == g_customScaling.end())
+        return nullptr;
+
+    SpellLevels const& levels = spellItr->second;
+    if (levels.size() <= 1)
+        return nullptr;
+
+    uint32 level = player->GetLevel();
+    if (level >= levels.size())
+        level = uint32(levels.size() - 1);
+    if (level == 0)
+        level = 1;
+
+    LevelRule const& rule = levels[level];
+    return rule.present ? &rule : nullptr;
+}
+
 bool LoadScalingFile(std::string const& path)
 {
     std::ifstream input(path);
@@ -109,16 +133,17 @@ bool LoadScalingFile(std::string const& path)
             std::istringstream row(line);
             uint32 spellId = 0;
             uint32 level = 0;
+            int32 castTimeMs = 0;
             int32 durationMs = 0;
             std::array<std::string, 6> amountTokens{};
-            if (!(row >> spellId >> level >> durationMs
+            if (!(row >> spellId >> level >> castTimeMs >> durationMs
                 >> amountTokens[0] >> amountTokens[1]
                 >> amountTokens[2] >> amountTokens[3]
                 >> amountTokens[4] >> amountTokens[5]))
             {
                 LOG_ERROR(
                     "module.SpellDraft",
-                    "Aventureros de Azeroth: malformed normalized spell scaling row {} in {}",
+                    "Aventureros de Azeroth: malformed profile-aware scaling row {} in {}",
                     lineNumber,
                     path
                 );
@@ -137,11 +162,12 @@ bool LoadScalingFile(std::string const& path)
                 return false;
             }
 
-            if (spellId < 201000 || spellId > 201999 || level == 0 || level > 255 || durationMs < 0)
+            if (spellId < 201000 || spellId > 201999 || level == 0 || level > 255
+                || castTimeMs < 0 || durationMs < 0)
             {
                 LOG_ERROR(
                     "module.SpellDraft",
-                    "Aventureros de Azeroth: invalid normalized spell ID/level/duration on row {} in {}",
+                    "Aventureros de Azeroth: invalid normalized spell ID/level/cast/duration on row {} in {}",
                     lineNumber,
                     path
                 );
@@ -150,6 +176,7 @@ bool LoadScalingFile(std::string const& path)
 
             LevelRule rule;
             rule.present = true;
+            rule.castTimeMs = castTimeMs;
             rule.durationMs = durationMs;
             for (uint8 effectIndex = 0; effectIndex < 3; ++effectIndex)
             {
@@ -240,7 +267,7 @@ bool LoadScalingFile(std::string const& path)
     g_customScaling = std::move(loaded);
     LOG_INFO(
         "module.SpellDraft",
-        "Aventureros de Azeroth: loaded normalized scaling for {} custom spells ({} level rows).",
+        "Aventureros de Azeroth: loaded profile-aware scaling for {} custom spells ({} level rows).",
         g_customScaling.size(),
         levelRows
     );
@@ -257,30 +284,16 @@ public:
 
     void OnPlayerSpellCast(Player* player, Spell* spell, bool /*skipCheck*/) override
     {
-        if (!g_customScalingEnabled || !player || !spell)
+        if (!player || !spell)
             return;
 
-        auto const spellItr = g_customScaling.find(spell->GetSpellInfo()->Id);
-        if (spellItr == g_customScaling.end())
-            return;
-
-        SpellLevels const& levels = spellItr->second;
-        if (levels.size() <= 1)
-            return;
-
-        uint32 level = player->GetLevel();
-        if (level >= levels.size())
-            level = uint32(levels.size() - 1);
-        if (level == 0)
-            level = 1;
-
-        LevelRule const& rule = levels[level];
-        if (!rule.present)
+        LevelRule const* rule = FindLevelRule(player, spell->GetSpellInfo()->Id);
+        if (!rule)
             return;
 
         for (uint8 effectIndex = 0; effectIndex < 3; ++effectIndex)
         {
-            EffectRange const& range = rule.effects[effectIndex];
+            EffectRange const& range = rule->effects[effectIndex];
             if (!range.active)
                 continue;
 
@@ -290,10 +303,21 @@ public:
             spell->SetSpellValue(EffectSpellValueMod(effectIndex), value);
         }
 
-        if (rule.durationMs > 0)
-            spell->SetSpellValue(SPELLVALUE_AURA_DURATION, rule.durationMs);
+        if (rule->durationMs > 0)
+            spell->SetSpellValue(SPELLVALUE_AURA_DURATION, rule->durationMs);
     }
 };
+}
+
+// Spell::prepare() calls this through the small Aventureros core bridge after
+// AzerothCore has applied normal haste/spell modifiers and before the cast timer
+// is committed/sent to the client. Keeping cast-time selection here means the
+// same profile table owns cast time and effect values without mutating shared
+// SpellInfo/DBC records at runtime.
+int32 GetAventurerosCustomSpellCastTime(Player const* player, uint32 spellId, int32 fallbackCastTime)
+{
+    LevelRule const* rule = FindLevelRule(player, spellId);
+    return rule ? rule->castTimeMs : fallbackCastTime;
 }
 
 void ConfigureCustomSpellScaling(bool enabled)
