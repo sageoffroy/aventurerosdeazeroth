@@ -20,7 +20,6 @@
         "form.bear"
       ]
     },
-    "136": {},
     "348": {
       "grants": [
         "effect.immolate"
@@ -341,6 +340,11 @@
     "6785": {
       "requires": [
         "form.cat"
+      ]
+    },
+    "7384": {
+      "requires": [
+        "stance.battle"
       ]
     },
     "8676": {
