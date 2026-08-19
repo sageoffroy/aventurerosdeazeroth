@@ -1,469 +1,113 @@
 {
   "schema_version": 1,
   "cards": {
-    "71": {
-      "grants": [
-        "stance.defensive"
-      ],
-      "teaches": [
-        355
-      ]
-    },
-    "72": {
-      "requires": [
-        "stance.battle",
-        "stance.defensive"
-      ]
-    },
-    "99": {
-      "requires": [
-        "form.bear"
-      ]
-    },
-    "348": {
-      "grants": [
-        "effect.immolate"
-      ]
-    },
-    "676": {
-      "requires": [
-        "stance.defensive"
-      ]
-    },
-    "688": {
-      "grants": [
-        "pet.demon"
-      ]
-    },
-    "691": {
-      "grants": [
-        "pet.demon"
-      ],
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "693": {
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "694": {
-      "requires": [
-        "stance.battle",
-        "stance.defensive"
-      ]
-    },
-    "697": {
-      "grants": [
-        "pet.demon"
-      ],
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "698": {
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "703": {
-      "requires": [
-        "state.stealth"
-      ]
-    },
-    "712": {
-      "grants": [
-        "pet.demon"
-      ],
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "755": {
-      "requires": [
-        "pet.demon"
-      ]
-    },
-    "768": {
-      "grants": [
-        "form.cat"
-      ],
-      "teaches": [
-        5215,
-        1082
-      ]
-    },
-    "772": {
-      "requires": [
-        "stance.battle",
-        "stance.defensive"
-      ]
-    },
-    "779": {
-      "requires": [
-        "form.bear"
-      ]
-    },
-    "871": {
-      "requires": [
-        "stance.defensive"
-      ]
-    },
-    "1079": {
-      "requires": [
-        "form.cat"
-      ]
-    },
-    "1098": {
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "1120": {
-      "grants": [
-        "resource.soul_shard"
-      ],
-      "teaches": [
-        6201
-      ]
-    },
-    "1515": {
-      "grants": [
-        "pet.hunter"
-      ],
-      "teaches": [
-        6991,
-        982,
-        2641,
-        883,
-        1002,
-        1462,
-        136
-      ]
-    },
-    "1715": {
-      "requires": [
-        "stance.battle",
-        "stance.berserker"
-      ]
-    },
-    "1719": {
-      "requires": [
-        "stance.berserker"
-      ]
-    },
-    "1784": {
-      "grants": [
-        "state.stealth"
-      ],
-      "teaches": [
-        921,
-        6770
-      ]
-    },
-    "1822": {
-      "requires": [
-        "form.cat"
-      ]
-    },
-    "1833": {
-      "requires": [
-        "state.stealth"
-      ]
-    },
-    "1842": {
-      "requires": [
-        "state.stealth"
-      ]
-    },
-    "20164": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "20165": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "20166": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "20271": {
-      "requires": [
-        "state.paladin_seal"
-      ]
-    },
-    "20375": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "21082": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "21084": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "2362": {
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "2457": {
-      "grants": [
-        "stance.battle"
-      ],
-      "teaches": [
-        100
-      ]
-    },
-    "2458": {
-      "grants": [
-        "stance.berserker"
-      ],
-      "teaches": [
-        20252,
-        1680
-      ]
-    },
-    "2565": {
-      "requires": [
-        "stance.defensive"
-      ]
-    },
-    "29722": {
-      "synergy": [
-        "effect.immolate"
-      ]
-    },
-    "34026": {
-      "requires": [
-        "pet.hunter"
-      ]
-    },
-    "3411": {
-      "requires": [
-        "stance.defensive"
-      ]
-    },
-    "47241": {
-      "grants": [
-        "form.metamorphosis"
-      ],
-      "teaches": [
-        54785,
-        59671
-      ]
-    },
-    "48018": {
-      "grants": [
-        "effect.demonic_circle"
-      ],
-      "teaches": [
-        48020
-      ]
-    },
-    "5209": {
-      "requires": [
-        "form.bear"
-      ]
-    },
-    "5211": {
-      "requires": [
-        "form.bear"
-      ]
-    },
-    "5215": {
-      "grants": [
-        "state.stealth"
-      ]
-    },
-    "5221": {
-      "requires": [
-        "form.cat"
-      ]
-    },
-    "5229": {
-      "requires": [
-        "form.bear"
-      ]
-    },
-    "5308": {
-      "requires": [
-        "stance.battle",
-        "stance.berserker"
-      ]
-    },
-    "5487": {
-      "grants": [
-        "form.bear"
-      ],
-      "teaches": [
-        6795,
-        6807
-      ]
-    },
-    "6201": {
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "6343": {
-      "requires": [
-        "stance.battle",
-        "stance.defensive"
-      ]
-    },
-    "6353": {
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "6366": {
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "6552": {
-      "requires": [
-        "stance.berserker"
-      ]
-    },
-    "6785": {
-      "requires": [
-        "form.cat"
-      ]
-    },
-    "7384": {
-      "requires": [
-        "stance.battle"
-      ]
-    },
-    "8676": {
-      "requires": [
-        "state.stealth"
-      ]
-    },
-    "8998": {
-      "requires": [
-        "form.cat"
-      ]
-    },
-    "9005": {
-      "requires": [
-        "form.cat"
-      ]
-    },
-    "16857": {
-      "requires": [
-        "form.bear",
-        "form.cat"
-      ]
-    },
-    "16979": {
-      "requires": [
-        "form.bear"
-      ]
-    },
-    "20230": {
-      "requires": [
-        "stance.battle"
-      ]
-    },
-    "22568": {
-      "requires": [
-        "form.cat"
-      ]
-    },
-    "22570": {
-      "requires": [
-        "form.cat"
-      ]
-    },
-    "22842": {
-      "requires": [
-        "form.bear"
-      ]
-    },
-    "23920": {
-      "requires": [
-        "stance.battle",
-        "stance.defensive"
-      ]
-    },
-    "29893": {
-      "requires": [
-        "resource.soul_shard"
-      ]
-    },
-    "31801": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "31892": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "33745": {
-      "requires": [
-        "form.bear"
-      ]
-    },
-    "33876": {
-      "requires": [
-        "form.cat"
-      ]
-    },
-    "33878": {
-      "requires": [
-        "form.bear"
-      ]
-    },
-    "34428": {
-      "requires": [
-        "stance.battle",
-        "stance.berserker"
-      ]
-    },
-    "53271": {
-      "requires": [
-        "pet.hunter"
-      ]
-    },
-    "53407": {
-      "requires": [
-        "state.paladin_seal"
-      ]
-    },
-    "53408": {
-      "requires": [
-        "state.paladin_seal"
-      ]
-    },
-    "53720": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "53736": {
-      "grants": [
-        "state.paladin_seal"
-      ]
-    },
-    "64382": {
-      "requires": [
-        "stance.battle"
-      ]
-    }
+    "53": {"grants": ["resource.combo_points"]},
+    "71": {"grants": ["stance.defensive"], "teaches": [355]},
+    "72": {"requires": ["stance.battle", "stance.defensive"]},
+    "99": {"requires": ["form.bear"]},
+    "348": {"grants": ["effect.immolate"]},
+    "408": {"requires": ["resource.combo_points"]},
+    "676": {"requires": ["stance.defensive"]},
+    "688": {"grants": ["pet.demon"]},
+    "691": {"grants": ["pet.demon"], "requires": ["resource.soul_shard"]},
+    "693": {"requires": ["resource.soul_shard"]},
+    "694": {"requires": ["stance.battle", "stance.defensive"]},
+    "697": {"grants": ["pet.demon"], "requires": ["resource.soul_shard"]},
+    "698": {"requires": ["resource.soul_shard"]},
+    "703": {"grants": ["resource.combo_points"], "requires": ["state.stealth"]},
+    "712": {"grants": ["pet.demon"], "requires": ["resource.soul_shard"]},
+    "755": {"requires": ["pet.demon"]},
+    "768": {"grants": ["form.cat", "resource.combo_points"], "teaches": [5215, 1082]},
+    "772": {"requires": ["stance.battle", "stance.defensive"]},
+    "779": {"requires": ["form.bear"]},
+    "871": {"requires": ["stance.defensive"]},
+    "1079": {"requires": ["form.cat"]},
+    "1082": {"grants": ["resource.combo_points"]},
+    "1098": {"requires": ["resource.soul_shard"]},
+    "1120": {"grants": ["resource.soul_shard"], "teaches": [6201]},
+    "1515": {"grants": ["pet.hunter"], "teaches": [6991, 982, 2641, 883, 1002, 1462, 136]},
+    "16979": {"requires": ["internal.never"]},
+    "1715": {"requires": ["stance.battle", "stance.berserker"]},
+    "1719": {"requires": ["stance.berserker"]},
+    "1752": {"grants": ["resource.combo_points"]},
+    "1776": {"grants": ["resource.combo_points"]},
+    "1784": {"grants": ["state.stealth"], "teaches": [921, 6770]},
+    "1822": {"grants": ["resource.combo_points"], "requires": ["form.cat"]},
+    "1833": {"grants": ["resource.combo_points"], "requires": ["state.stealth"]},
+    "1842": {"requires": ["state.stealth"]},
+    "1943": {"requires": ["resource.combo_points"]},
+    "2098": {"requires": ["resource.combo_points"]},
+    "2362": {"requires": ["resource.soul_shard"]},
+    "2457": {"grants": ["stance.battle"], "teaches": [100]},
+    "2458": {"grants": ["stance.berserker"], "teaches": [20252, 1680]},
+    "2565": {"requires": ["stance.defensive"]},
+    "5171": {"requires": ["resource.combo_points"]},
+    "5209": {"requires": ["form.bear"]},
+    "5211": {"requires": ["form.bear"]},
+    "5215": {"grants": ["state.stealth"]},
+    "5221": {"grants": ["resource.combo_points"], "requires": ["form.cat"]},
+    "5229": {"requires": ["form.bear"]},
+    "5308": {"requires": ["stance.battle", "stance.berserker"]},
+    "5487": {"grants": ["form.bear"], "teaches": [6795, 6807]},
+    "6197": {"requires": ["internal.never"]},
+    "6201": {"requires": ["resource.soul_shard"]},
+    "6343": {"requires": ["stance.battle", "stance.defensive"]},
+    "6353": {"requires": ["resource.soul_shard"]},
+    "6366": {"requires": ["resource.soul_shard"]},
+    "6552": {"requires": ["stance.berserker"]},
+    "6785": {"grants": ["resource.combo_points"], "requires": ["form.cat"]},
+    "7384": {"requires": ["stance.battle"]},
+    "8647": {"requires": ["resource.combo_points"]},
+    "8676": {"grants": ["resource.combo_points"], "requires": ["state.stealth"]},
+    "8998": {"requires": ["form.cat"]},
+    "9005": {"grants": ["resource.combo_points"], "requires": ["form.cat"]},
+    "12494": {"requires": ["internal.never"]},
+    "12536": {"requires": ["internal.never"]},
+    "16857": {"requires": ["form.bear", "form.cat"]},
+    "20050": {"requires": ["internal.never"]},
+    "20052": {"requires": ["internal.never"]},
+    "20053": {"requires": ["internal.never"]},
+    "20154": {"requires": ["internal.never"]},
+    "20164": {"grants": ["state.paladin_seal"]},
+    "20165": {"grants": ["state.paladin_seal"]},
+    "20166": {"grants": ["state.paladin_seal"]},
+    "20230": {"requires": ["stance.battle"]},
+    "20271": {"requires": ["state.paladin_seal"]},
+    "20375": {"grants": ["state.paladin_seal"]},
+    "20647": {"requires": ["internal.never"]},
+    "21082": {"grants": ["state.paladin_seal"]},
+    "21084": {"grants": ["state.paladin_seal"]},
+    "22568": {"requires": ["form.cat"]},
+    "22570": {"requires": ["form.cat"]},
+    "22842": {"requires": ["form.bear"]},
+    "23920": {"requires": ["stance.battle", "stance.defensive"]},
+    "26679": {"requires": ["resource.combo_points"]},
+    "29722": {"synergy": ["effect.immolate"]},
+    "29893": {"requires": ["resource.soul_shard"]},
+    "31643": {"requires": ["internal.never"]},
+    "31801": {"grants": ["state.paladin_seal"]},
+    "31892": {"grants": ["state.paladin_seal"]},
+    "32645": {"requires": ["resource.combo_points"]},
+    "33151": {"requires": ["internal.never"]},
+    "33745": {"requires": ["form.bear"]},
+    "33876": {"grants": ["resource.combo_points"], "requires": ["form.cat"]},
+    "33878": {"requires": ["form.bear"]},
+    "34026": {"requires": ["pet.hunter"]},
+    "3411": {"requires": ["stance.defensive"]},
+    "34428": {"requires": ["stance.battle", "stance.berserker"]},
+    "34501": {"requires": ["internal.never"]},
+    "34936": {"requires": ["internal.never"]},
+    "35098": {"requires": ["internal.never"]},
+    "43339": {"requires": ["internal.never"]},
+    "47241": {"grants": ["form.metamorphosis"], "teaches": [54785, 59671]},
+    "48018": {"grants": ["effect.demonic_circle"], "teaches": [48020]},
+    "53271": {"requires": ["pet.hunter"]},
+    "53407": {"requires": ["state.paladin_seal"]},
+    "53408": {"requires": ["state.paladin_seal"]},
+    "53659": {"requires": ["internal.never"]},
+    "53720": {"grants": ["state.paladin_seal"]},
+    "53736": {"grants": ["state.paladin_seal"]},
+    "59671": {"requires": ["internal.never"]},
+    "64382": {"requires": ["stance.battle"]}
   }
 }
