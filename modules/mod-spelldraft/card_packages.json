@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "card_id": 190001,
+      "source_spell_id": 10059,
+      "name": "Maestro de Portales",
+      "description": "Aprendes todos los hechizos de Teletransporte y Portal. No requieren componentes.",
+      "rarity": 3,
+      "class_set": 3,
+      "min_level": 1,
+      "remove_item_requirements": true,
+      "teaches": [
+        3561,
+        3562,
+        3563,
+        3565,
+        3566,
+        3567,
+        32271,
+        32272,
+        33690,
+        35715,
+        49358,
+        49359,
+        53140,
+        10059,
+        11416,
+        11417,
+        11418,
+        11419,
+        11420,
+        32266,
+        32267,
+        33691,
+        35717,
+        49360,
+        49361,
+        53142
+      ]
+    }
+  ]
+}
