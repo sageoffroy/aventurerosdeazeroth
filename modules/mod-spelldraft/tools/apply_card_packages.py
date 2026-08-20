@@ -38,6 +38,22 @@ def load_json(path: Path) -> dict:
         raise PackageError(f"cannot read {path}: {exc}") from exc
 
 
+def validate_spell_id_list(card_id: int, field: str, values: object) -> list[int]:
+    if not isinstance(values, list) or any(
+        isinstance(value, bool) or not isinstance(value, int) or value <= 0
+        for value in values
+    ):
+        raise PackageError(f"package {card_id}: invalid {field} list")
+
+    cleaned: list[int] = []
+    for value in values:
+        if value == card_id:
+            raise PackageError(f"package {card_id}: {field} cannot contain itself")
+        if value not in cleaned:
+            cleaned.append(value)
+    return cleaned
+
+
 def load_packages(path: Path) -> list[dict]:
     raw = load_json(path)
     if raw.get("schema_version") != 1 or not isinstance(raw.get("packages"), list):
@@ -47,18 +63,20 @@ def load_packages(path: Path) -> list[dict]:
     seen: set[int] = set()
     for package in packages:
         card_id = package.get("card_id")
-        teaches = package.get("teaches")
         if not isinstance(card_id, int) or not 190000 <= card_id <= 199999:
             raise PackageError("virtual package IDs must be in 190000-199999")
         if card_id in seen:
             raise PackageError(f"duplicate package card ID {card_id}")
-        if not isinstance(teaches, list) or not teaches or any(
-            isinstance(value, bool) or not isinstance(value, int) or value <= 0
-            for value in teaches
-        ):
-            raise PackageError(f"package {card_id}: invalid teaches list")
-        if card_id in teaches:
-            raise PackageError(f"package {card_id}: cannot teach itself")
+
+        teaches = validate_spell_id_list(card_id, "teaches", package.get("teaches"))
+        if not teaches:
+            raise PackageError(f"package {card_id}: teaches cannot be empty")
+        package["teaches"] = teaches
+        package["exclude_from_pool"] = validate_spell_id_list(
+            card_id,
+            "exclude_from_pool",
+            package.get("exclude_from_pool", []),
+        )
         seen.add(card_id)
     return packages
 
@@ -141,9 +159,16 @@ def patch_spell_dbc(
             raise PackageError(f"package {card_id}: virtual DBC row was not written")
         if package.get("remove_item_requirements", False):
             ids = set(int(value) for value in package["teaches"])
-            ids.update(replacements[value] for value in package["teaches"] if value in replacements)
+            ids.update(
+                replacements[value]
+                for value in package["teaches"]
+                if value in replacements
+            )
             for spell_id in ids:
-                if any(u32(verify[spell_id], field) != 0 for field in ITEM_REQUIREMENT_FIELDS):
+                if any(
+                    u32(verify[spell_id], field) != 0
+                    for field in ITEM_REQUIREMENT_FIELDS
+                ):
                     raise PackageError(f"package {card_id}: reagent survived on {spell_id}")
     return cleared_counts
 
@@ -153,29 +178,58 @@ def table_bounds(lines: list[str], marker: str) -> tuple[int, int]:
         start = next(i for i, line in enumerate(lines) if line.strip() == marker)
     except StopIteration as exc:
         raise PackageError(f"catalog missing {marker}") from exc
-    end = next((i for i in range(start + 1, len(lines)) if lines[i].strip() == "}"), None)
+    end = next(
+        (i for i in range(start + 1, len(lines)) if lines[i].strip() == "}"),
+        None,
+    )
     if end is None:
         raise PackageError(f"catalog table {marker} is not closed")
     return start, end
 
 
-def patch_catalog(path: Path, packages: list[dict]) -> None:
+def runtime_catalog_ids(native_ids: set[int], replacements: dict[int, int]) -> set[int]:
+    result = set(native_ids)
+    result.update(replacements[value] for value in native_ids if value in replacements)
+    return result
+
+
+def patch_catalog(
+    path: Path,
+    packages: list[dict],
+    replacements: dict[int, int],
+) -> int:
     lines = path.read_text(encoding="utf-8").splitlines()
-    ids = {int(package["card_id"]) for package in packages}
+    package_ids = {int(package["card_id"]) for package in packages}
+
+    native_remove: set[int] = set()
+    for package in packages:
+        native_remove.update(int(value) for value in package["teaches"])
+        native_remove.update(int(value) for value in package["exclude_from_pool"])
+    remove_ids = runtime_catalog_ids(native_remove, replacements)
+    remove_ids.update(package_ids)
 
     start, end = table_bounds(lines, "SpellDraftCatalog = {")
-    body = [
-        line for line in lines[start + 1:end]
-        if not (m := re.match(r"^\s*\{ id = (\d+),", line)) or int(m.group(1)) not in ids
-    ]
+    original_body = lines[start + 1:end]
+    body: list[str] = []
+    removed = 0
+    for line in original_body:
+        match = re.match(r"^\s*\{ id = (\d+),", line)
+        if match and int(match.group(1)) in remove_ids:
+            removed += 1
+            continue
+        body.append(line)
+
     for package in packages:
         body.append(
             '  { id = %d, rarity = %d, classSet = %d, minLevel = %d, '
             'name = "%s", virtual = true, grants = {}, requires = {}, synergy = {}, '
             'ranks = { { id = %d, level = 1 } } },'
             % (
-                package["card_id"], package["rarity"], package["class_set"],
-                package.get("min_level", 1), str(package["name"]).replace('"', '\\"'),
+                package["card_id"],
+                package["rarity"],
+                package["class_set"],
+                package.get("min_level", 1),
+                str(package["name"]).replace('"', '\\"'),
                 package["card_id"],
             )
         )
@@ -183,8 +237,10 @@ def patch_catalog(path: Path, packages: list[dict]) -> None:
 
     start, end = table_bounds(lines, "SpellDraftTeachMap = {")
     body = [
-        line for line in lines[start + 1:end]
-        if not (m := re.match(r"^\s*\[(\d+)\]\s*=", line)) or int(m.group(1)) not in ids
+        line
+        for line in lines[start + 1:end]
+        if not (match := re.match(r"^\s*\[(\d+)\]\s*=", line))
+        or int(match.group(1)) not in package_ids
     ]
     for package in packages:
         teaches = ", ".join(str(value) for value in package["teaches"])
@@ -193,12 +249,27 @@ def patch_catalog(path: Path, packages: list[dict]) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     final = path.read_text(encoding="utf-8")
+    final_catalog_ids = {
+        int(value)
+        for value in re.findall(r"^\s*\{ id = (\d+),", final, re.MULTILINE)
+    }
+    leftover = sorted(runtime_catalog_ids(native_remove, replacements) & final_catalog_ids)
+    if leftover:
+        raise PackageError(
+            "package-owned spells survived catalog compression: "
+            + ", ".join(str(value) for value in leftover)
+        )
+
     for package in packages:
         card_id = int(package["card_id"])
         if len(re.findall(rf"^\s*\{{ id = {card_id},", final, re.MULTILINE)) != 1:
             raise PackageError(f"package {card_id}: catalog entry validation failed")
-        if len(re.findall(rf"^\s*\[{card_id}\]\s*=\s*\{{", final, re.MULTILINE)) != 1:
+        if len(
+            re.findall(rf"^\s*\[{card_id}\]\s*=\s*\{{", final, re.MULTILINE)
+        ) != 1:
             raise PackageError(f"package {card_id}: teach map validation failed")
+
+    return removed
 
 
 def main() -> None:
@@ -217,7 +288,11 @@ def main() -> None:
             packages,
             replacements,
         )
-        patch_catalog(args.catalog.expanduser().resolve(), packages)
+        removed = patch_catalog(
+            args.catalog.expanduser().resolve(),
+            packages,
+            replacements,
+        )
     except (DBCError, PackageError, KeyError, TypeError, ValueError) as exc:
         raise SystemExit(f"SpellDraft package application aborted: {exc}") from exc
 
@@ -228,6 +303,7 @@ def main() -> None:
             f"  {card_id} {package['name']}: teaches={len(package['teaches'])}, "
             f"reagent/item-requirement rows cleared={cleared[card_id]}"
         )
+    print(f"  individual package-owned draft cards removed: {removed}")
     print("  virtual package cards are draftable but are not learned as spells")
 
 
