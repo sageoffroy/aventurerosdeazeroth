@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "cards": [
+    {
+      "spell_id": 55342,
+      "rarity": 3,
+      "class_set": 3,
+      "class": "MAGE",
+      "min_level": 1,
+      "name": "Mirror Image"
+    }
+  ],
+  "owner_scaled_support_spells": [
+    {
+      "spell_id": 59638,
+      "label": "Mirror Image Frostbolt",
+      "derive_from_root": 116,
+      "reference_level": 80
+    },
+    {
+      "spell_id": 59637,
+      "label": "Mirror Image Fire Blast",
+      "derive_from_root": 2136,
+      "reference_level": 80
+    }
+  ]
+}
