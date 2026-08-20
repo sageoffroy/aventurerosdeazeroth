@@ -64,6 +64,23 @@
         206143
       ],
       "teaches_by_team": {}
+    },
+    {
+      "card_id": 190003,
+      "source_spell_id": 1008,
+      "name": "Manipulación Mágica",
+      "description": "Aprendes Amplificar magia y Atenuar magia.",
+      "rarity": 1,
+      "class_set": 3,
+      "min_level": 1,
+      "passive_marker": true,
+      "remove_item_requirements": false,
+      "exclude_from_pool": [],
+      "teaches": [
+        201008,
+        200604
+      ],
+      "teaches_by_team": {}
     }
   ]
 }
