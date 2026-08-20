@@ -85,6 +85,16 @@ def main() -> None:
         str(dbc_src),
     )
 
+    # The historical SpellChoice renderer does not know Aventureros TeachMap.
+    # Generate a tiny loose-addon overlay from card_packages.json so package
+    # cards show the actual spells they teach as square icons on the right.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "patch_spelldraft_package_choice_ui.py"),
+        "--client-dir",
+        str(client),
+    )
+
     # Reviewed special cases mutate the already-normalized runtime card without
     # creating a second scaling path. Numeric amounts stay owned by the normalizer.
     # If the reviewed design changes duration, the same stage patches the duration
@@ -159,6 +169,7 @@ def main() -> None:
     print("Teleport: Moonglade usa el ID nativo y solo es elegible para Elfos de la Noche.")
     print("Arcane Intellect conserva identidad/escalado, usa comportamiento grupal y fuerza duracion runtime de 1 hora.")
     print("Las cartas-paquete son marcadores sin rango visible (sin Rank 1 / Rango 1 heredado).")
+    print("Las cartas-paquete muestran a la derecha los iconos de las habilidades que ensenian.")
     print("Audit pool: si audit_pool.json esta habilitado, solo ofrece su whitelist.")
 
 
