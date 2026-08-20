@@ -72,6 +72,23 @@ SpellDraft.RerollsPerLevel = 0
 SpellDraft.BansPerLevel = 0
 
 ############################################################
+# Proteccion de cartas
+############################################################
+
+# Activa/desactiva la mecanica de proteger una carta para conservarla.
+# Default: 1
+SpellDraft.Protection.Enable = 1
+
+# Protecciones disponibles al comenzar.
+# Default: 3
+SpellDraft.StartingProtections = 3
+
+# Protecciones adicionales ganadas por cada nuevo draft que la progresion
+# concede. Los drafts iniciales no generan este bonus.
+# Default: 0
+SpellDraft.ProtectionPerDraft = 0
+
+############################################################
 # Pesos de rareza
 ############################################################
 
