@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare Aventureros runtime, then apply SpellDraft packages and audit pool."""
+"""Prepare Aventureros runtime, then apply SpellDraft packages, reviewed mutations and audit pool."""
 
 from __future__ import annotations
 
@@ -74,6 +74,19 @@ def main() -> None:
         str(resolved),
     )
 
+    # Reviewed special cases mutate the already-normalized runtime card without
+    # creating a second scaling path. Numeric amounts stay owned by the normalizer.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "apply_reviewed_spell_mutations.py"),
+        "--dbc-dir",
+        str(dbc_src),
+        "--catalog",
+        str(runtime_catalog),
+        "--resolved",
+        str(resolved),
+    )
+
     # The audit whitelist is deliberately applied only to the generated runtime
     # catalog. Source metadata and dependency entries remain intact and are
     # restored automatically by the next preparation run.
@@ -85,8 +98,7 @@ def main() -> None:
     )
 
     # prepare_first_run already built the client patch once. Build/install it
-    # again so the final MPQ contains the passive package marker plus the final
-    # reagentless portal and reviewed travel-spell DBC data applied above.
+    # again so the final MPQ contains package cards and reviewed DBC mutations.
     run(
         sys.executable,
         str(TOOLS_DIR / "build_adventurer_client_patch.py"),
@@ -124,11 +136,12 @@ def main() -> None:
     )
 
     print()
-    print("Preparacion con paquetes completa.")
+    print("Preparacion con paquetes y mutaciones revisadas completa.")
     print("Maestro de Portales: carta pasiva Epic nivel 1, icono Portal: Stormwind.")
     print("Ensenia solo los Portales de la faccion del personaje, mas Dalaran.")
     print("Los Portales no requieren componentes; Teleports/Portals individuales quedan fuera del pool.")
     print("Teleport: Moonglade usa el ID nativo y solo es elegible para Elfos de la Noche.")
+    print("Arcane Intellect conserva identidad/escalado y usa comportamiento grupal + duracion de Arcane Brilliance.")
     print("Audit pool: si audit_pool.json esta habilitado, solo ofrece su whitelist.")
 
 
