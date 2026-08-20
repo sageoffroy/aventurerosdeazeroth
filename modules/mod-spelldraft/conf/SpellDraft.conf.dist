@@ -1,14 +1,84 @@
 [worldserver]
 
-#
+############################################################
 # Aventureros de Azeroth - SpellDraft
-#
+############################################################
 
-#
-# SpellDraft.Enable
-#
-# Activa el sistema SpellDraft.
-#
+# Activa/desactiva el sistema SpellDraft.
 # Default: 1
-#
 SpellDraft.Enable = 1
+
+############################################################
+# Progresion de habilidades
+############################################################
+
+# Cantidad de habilidades elegidas al comenzar en nivel 1.
+# Default: 3
+SpellDraft.StartingDrafts = 3
+
+# Primer nivel que concede una eleccion adicional despues del inicio.
+# Default: 5
+SpellDraft.FirstAdditionalDraftLevel = 5
+
+# A partir del primer hito, cada cuantos niveles se concede otra eleccion.
+# Ejemplo con 5: niveles 5, 10, 15, 20...
+# Default: 5
+SpellDraft.LevelsPerDraft = 5
+
+# Cantidad de elecciones concedidas en cada hito.
+# Default: 1
+SpellDraft.DraftsPerMilestone = 1
+
+# Maximo total de habilidades elegidas directamente por Draft.
+# Las habilidades gratuitas recibidas mediante "teaches" no cuentan.
+# 0 = sin limite.
+# Default: 15
+SpellDraft.MaxDraftedSpells = 15
+
+############################################################
+# Oferta de cartas
+############################################################
+
+# Cantidad de cartas mostradas en cada oferta.
+# Rango soportado actualmente: 1-5.
+# Default: 5
+SpellDraft.OfferSize = 5
+
+# Nivel minimo usado para determinar que cartas pueden entrar al pool.
+# Permite que un personaje de nivel bajo tenga una oferta variada.
+# Default: 20
+SpellDraft.LowLevelPoolFloor = 20
+
+############################################################
+# Rerolls y bans
+############################################################
+
+# Rerolls disponibles al comenzar.
+# Default: 3
+SpellDraft.StartingRerolls = 3
+
+# Bans disponibles al comenzar.
+# Default: 3
+SpellDraft.StartingBans = 3
+
+# Rerolls adicionales por cada nivel nuevo alcanzado.
+# 0 = no otorgar rerolls por nivel.
+# Default: 0
+SpellDraft.RerollsPerLevel = 0
+
+# Bans adicionales por cada nivel nuevo alcanzado.
+# 0 = no otorgar bans por nivel.
+# Default: 0
+SpellDraft.BansPerLevel = 0
+
+############################################################
+# Pesos de rareza
+############################################################
+
+# Son pesos relativos: no es obligatorio que sumen 100.
+# Con los valores por defecto equivalen a 70 / 20 / 7 / 2.5 / 0.5 %.
+SpellDraft.Rarity.Common = 70.0
+SpellDraft.Rarity.Uncommon = 20.0
+SpellDraft.Rarity.Rare = 7.0
+SpellDraft.Rarity.Epic = 2.5
+SpellDraft.Rarity.Legendary = 0.5
