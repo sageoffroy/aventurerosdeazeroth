@@ -80,21 +80,25 @@ Prueba directa:
 Decisión de diseño:
 
 - Una sola carta reemplaza a **Resguardo de Fuego** y **Resguardo de Escarcha** como elecciones independientes del draft.
-- Al elegirla se aprenden las dos habilidades activas:
-  - `200543` — Resguardo de Fuego normalizado.
-  - `6143` — Resguardo de Escarcha, todavía nativo/rankeado en la cohorte actual.
+- Al elegirla se aprenden las dos habilidades activas normalizadas:
+  - `200543` — Resguardo de Fuego (raíz nativa `543`).
+  - `206143` — Resguardo de Escarcha (raíz nativa `6143`).
 - La carta `190002 Resguardo Elemental` queda como marcador pasivo en el libro de hechizos; las dos habilidades enseñadas son las que se usan activamente.
-- `543/200543 Fire Ward` y `6143 Frost Ward` quedan fuera del pool como cartas independientes.
+- Los resguardos individuales quedan fuera del pool como elecciones independientes porque pertenecen al `TeachMap` del paquete.
 - Usa como icono de referencia el de `Fire Ward (543)`.
 - Rareza configurada temporalmente como **Uncommon**; se revisará en la pasada final de balance.
 
-Problemas detectados en la primera prueba visual:
+Problemas detectados y correcciones aplicadas:
 
-- La carta no muestra a la derecha los iconos/cuadritos de las habilidades que enseña, a diferencia de otras cartas con `teach`. Hay que integrar el paquete con la metadata/protocolo de preview del AddOn histórico, no sólo con `SpellDraftTeachMap` del servidor.
-- La carta mostraba **`Rango 1`** porque el marcador `190002` clonaba el subtexto localizado del `Fire Ward` nativo. Se agregó una finalización genérica de cartas-paquete para borrar Rank/Rango heredado.
-- `200543 Fire Ward` sí pertenece al pipeline normalizado. `6143 Frost Ward` todavía no; antes de aprobar el paquete hay que resolver su normalización/rankless scaling para que no quede atado a rangos nativos.
+- La primera carta no mostraba a la derecha los iconos/cuadritos de las habilidades que enseña. La búsqueda sobre el AddOn real confirmó que el `SpellChoice` histórico sólo renderiza la carta ofrecida y no conoce nuestro `SpellDraftTeachMap`. Se agregó `AventurerosPackageChoiceUI.lua`, generado desde `card_packages.json`, que dibuja los hechizos enseñados como cuadritos con tooltip a la derecha de cada carta-paquete. También respeta los paquetes por facción.
+- La carta mostraba **`Rango 1`** porque `190002` clonaba el subtexto localizado de `Fire Ward`. La finalización genérica de cartas-paquete (`finalize_package_cards.py`) borra los campos Rank/Rango heredados y valida que todos los marcadores sean rankless.
+- `6143 Frost Ward` estaba fuera de la cohorte normalizada original (`max_first_rank_level = 20`). Se amplió la cohorte canónica a **nivel 22**, por lo que Frost Ward ahora usa el ID determinista `206143` y el mismo pipeline de interpolación por nivel que el resto de hechizos normalizados. No se creó un segundo sistema de scaling.
 
-No marcar APROBADO hasta cerrar esos dos puntos: preview de `teach` y Frost Ward normalizado.
+Falta repetir la prueba visual/funcional en juego y confirmar:
+
+1. la carta ya no muestra `Rango 1`;
+2. aparecen los dos cuadritos a la derecha;
+3. al elegirla se aprenden `200543` y `206143`.
 
 ---
 
