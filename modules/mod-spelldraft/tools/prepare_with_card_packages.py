@@ -44,6 +44,7 @@ def main() -> None:
     output = args.output_dir.expanduser().resolve()
     runtime_catalog = install / "bin" / "lua_scripts" / "SpellDraft" / "catalog.lua"
     resolved = data_dir / "spelldraft" / "custom_spells.resolved.json"
+    scaling = data_dir / "spelldraft" / "custom_spell_scaling.tsv"
 
     prepare_args = [
         sys.executable,
@@ -76,6 +77,9 @@ def main() -> None:
 
     # Reviewed special cases mutate the already-normalized runtime card without
     # creating a second scaling path. Numeric amounts stay owned by the normalizer.
+    # If the reviewed design changes duration, the same stage patches the duration
+    # column in the canonical runtime scaling table so C++ cannot reapply the old
+    # native-family duration at cast time.
     run(
         sys.executable,
         str(TOOLS_DIR / "apply_reviewed_spell_mutations.py"),
@@ -85,6 +89,8 @@ def main() -> None:
         str(runtime_catalog),
         "--resolved",
         str(resolved),
+        "--scaling",
+        str(scaling),
     )
 
     # The audit whitelist is deliberately applied only to the generated runtime
@@ -141,7 +147,7 @@ def main() -> None:
     print("Ensenia solo los Portales de la faccion del personaje, mas Dalaran.")
     print("Los Portales no requieren componentes; Teleports/Portals individuales quedan fuera del pool.")
     print("Teleport: Moonglade usa el ID nativo y solo es elegible para Elfos de la Noche.")
-    print("Arcane Intellect conserva identidad/escalado y usa comportamiento grupal + duracion de Arcane Brilliance.")
+    print("Arcane Intellect conserva identidad/escalado, usa comportamiento grupal y fuerza duracion runtime de 1 hora.")
     print("Audit pool: si audit_pool.json esta habilitado, solo ofrece su whitelist.")
 
 
