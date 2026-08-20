@@ -36,7 +36,22 @@ diff --git a/modules/mod-spelldraft/lua/SpellDraft/draft.lua b/modules/mod-spell
          ClearPendingOffer(player:GetGUIDLow())
          player:SendAddonMessage("SpellChoiceClose", "", 0, player)
          return
-@@ -918,13 +926,8 @@ local function AcceptPick(player, spellId)
+@@ -891,10 +899,13 @@ local function AcceptPick(player, spellId)
+ 
+     local resources = GrantProgressionResources(player)
+     if resources.protectedSpellId == spellId then
+-        -- Picking the protected card itself consumes the protection normally;
+-        -- there is nothing left to carry into the next offer.
++        -- If the player protects a card and then picks that same card from the
++        -- current hand, the hold was never used to carry it forward. Refund it.
++        resources.protections = resources.protections + 1
+         resources.protectedSpellId = 0
+         SaveDraftResources(guid, resources)
++        SendCompatibilityState(player)
+     end
+ 
+     local draftIndex = state.count + 1
+@@ -918,13 +929,8 @@ local function AcceptPick(player, spellId)
      if DraftsRemaining(player) > 0 then
          EnsureAndSendOffer(player)
      else
@@ -52,14 +67,14 @@ diff --git a/modules/mod-spelldraft/lua/SpellDraft/draft.lua b/modules/mod-spell
          player:SendAddonMessage("SpellChoiceClose", "", 0, player)
      end
  end
-@@ -1058,10 +1061,10 @@ local function HandleProtect(player, spellId)
+@@ -1058,10 +1064,10 @@ local function HandleProtect(player, spellId)
          return
      end
  
 -    -- Protection is meaningful only when another draft remains after the
 -    -- current pick. Prevent wasting the final protection on the last choice.
 -    if DraftsRemaining(player) <= 1 then
-+    -- Protection may wait through level gaps (for example level 5 -> 10).
++    -- Protection may wait through level gaps (for example level 1 -> 5).
 +    -- Reject it only when this really is the last configured career draft.
 +    if not CanCarryProtectionToFutureDraft(player) then
          player:SendAddonMessage("SpellChoiceProtectDenied", "last", 0, player)
