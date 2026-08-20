@@ -5,19 +5,77 @@
 -- WotLK DBCs plus the curated rarity/class metadata from the historical addon.
 
 local CLASS_ADVENTURER = 10
-
--- Starting draft economy.
--- Aventureros begins with 3 chosen abilities.
--- Aventureros starts with 3 rerolls.
-local STARTING_DRAFTS = 3
-local DRAFTS_PER_ADDITIONAL_LEVEL = 10
-local STARTING_REROLLS = 3
-local STARTING_BANS = 3
-
-local OFFER_SIZE = 3
-local LOW_LEVEL_POOL_FLOOR = 20
 local CUSTOM_SPELL_OFFSET = 200000
 local CUSTOM_SPELL_MAX = 299999
+local MAX_PERSISTED_OFFER_SIZE = 5
+
+local function ConfigBoolean(name, default)
+    local raw = GetConfigValue(name)
+    if raw == nil or raw == "" then
+        return default
+    end
+
+    if raw == true or raw == 1 or raw == "1" then
+        return true
+    end
+    if raw == false or raw == 0 or raw == "0" then
+        return false
+    end
+
+    local value = string.lower(tostring(raw))
+    if value == "true" or value == "yes" or value == "on" then
+        return true
+    end
+    if value == "false" or value == "no" or value == "off" then
+        return false
+    end
+    return default
+end
+
+local function ConfigNumber(name, default, minimum, maximum, integer)
+    local value = tonumber(GetConfigValue(name))
+    if value == nil then
+        value = default
+    end
+
+    if integer then
+        value = math.floor(value)
+    end
+    if minimum ~= nil then
+        value = math.max(minimum, value)
+    end
+    if maximum ~= nil then
+        value = math.min(maximum, value)
+    end
+    return value
+end
+
+-- Gameplay tuning belongs in SpellDraft.conf, not in the Lua implementation.
+local SPELLDRAFT_ENABLED = ConfigBoolean("SpellDraft.Enable", true)
+
+local STARTING_DRAFTS = ConfigNumber("SpellDraft.StartingDrafts", 3, 0, 100, true)
+local FIRST_ADDITIONAL_DRAFT_LEVEL = ConfigNumber(
+    "SpellDraft.FirstAdditionalDraftLevel", 5, 2, 80, true
+)
+local LEVELS_PER_DRAFT = ConfigNumber("SpellDraft.LevelsPerDraft", 5, 1, 80, true)
+local DRAFTS_PER_MILESTONE = ConfigNumber(
+    "SpellDraft.DraftsPerMilestone", 1, 1, 20, true
+)
+local MAX_DRAFTED_SPELLS = ConfigNumber(
+    "SpellDraft.MaxDraftedSpells", 15, 0, 500, true
+)
+
+local STARTING_REROLLS = ConfigNumber("SpellDraft.StartingRerolls", 3, 0, 10000, true)
+local STARTING_BANS = ConfigNumber("SpellDraft.StartingBans", 3, 0, 10000, true)
+local REROLLS_PER_LEVEL = ConfigNumber("SpellDraft.RerollsPerLevel", 0, 0, 1000, true)
+local BANS_PER_LEVEL = ConfigNumber("SpellDraft.BansPerLevel", 0, 0, 1000, true)
+
+local OFFER_SIZE = ConfigNumber(
+    "SpellDraft.OfferSize", 5, 1, MAX_PERSISTED_OFFER_SIZE, true
+)
+local LOW_LEVEL_POOL_FLOOR = ConfigNumber(
+    "SpellDraft.LowLevelPoolFloor", 20, 1, 80, true
+)
 
 local scriptPath = debug.getinfo(1).source:sub(2)
 local parentPath = scriptPath:match("(.+[/\\])") or ""
@@ -27,12 +85,49 @@ end
 
 local SPELL_POOL = SpellDraftCatalog or {}
 local TEACH_MAP = SpellDraftTeachMap or {}
-local RARITY_DISTRIBUTION = SpellDraftRarityDistribution or {
+local GENERATED_RARITY_DISTRIBUTION = SpellDraftRarityDistribution or {
     [0] = 70.0,
     [1] = 20.0,
     [2] = 7.0,
     [3] = 2.5,
     [4] = 0.5,
+}
+local RARITY_DISTRIBUTION = {
+    [0] = ConfigNumber(
+        "SpellDraft.Rarity.Common",
+        GENERATED_RARITY_DISTRIBUTION[0] or 70.0,
+        0,
+        nil,
+        false
+    ),
+    [1] = ConfigNumber(
+        "SpellDraft.Rarity.Uncommon",
+        GENERATED_RARITY_DISTRIBUTION[1] or 20.0,
+        0,
+        nil,
+        false
+    ),
+    [2] = ConfigNumber(
+        "SpellDraft.Rarity.Rare",
+        GENERATED_RARITY_DISTRIBUTION[2] or 7.0,
+        0,
+        nil,
+        false
+    ),
+    [3] = ConfigNumber(
+        "SpellDraft.Rarity.Epic",
+        GENERATED_RARITY_DISTRIBUTION[3] or 2.5,
+        0,
+        nil,
+        false
+    ),
+    [4] = ConfigNumber(
+        "SpellDraft.Rarity.Legendary",
+        GENERATED_RARITY_DISTRIBUTION[4] or 0.5,
+        0,
+        nil,
+        false
+    ),
 }
 
 if #SPELL_POOL == 0 then
@@ -89,14 +184,27 @@ local function IsBotPlayer(player)
 end
 
 local function IsAdventurer(player)
-    return player and player:GetClass() == CLASS_ADVENTURER and not IsBotPlayer(player)
+    return SPELLDRAFT_ENABLED
+        and player
+        and player:GetClass() == CLASS_ADVENTURER
+        and not IsBotPlayer(player)
 end
 
 local function ExpectedDrafts(player)
     local level = math.max(1, player:GetLevel() or 1)
+    local expected = STARTING_DRAFTS
 
-    return STARTING_DRAFTS
-        + math.max(0, level - 1) * DRAFTS_PER_ADDITIONAL_LEVEL
+    if level >= FIRST_ADDITIONAL_DRAFT_LEVEL then
+        local milestones = math.floor(
+            (level - FIRST_ADDITIONAL_DRAFT_LEVEL) / LEVELS_PER_DRAFT
+        ) + 1
+        expected = expected + milestones * DRAFTS_PER_MILESTONE
+    end
+
+    if MAX_DRAFTED_SPELLS > 0 then
+        expected = math.min(expected, MAX_DRAFTED_SPELLS)
+    end
+    return expected
 end
 
 local function EligibilityLevel(player)
@@ -128,29 +236,34 @@ local function LoadDraftedState(guid, force)
     return state
 end
 
-local function LoadDraftResources(guid, force)
+local function LoadDraftResources(player, force)
+    local guid = player:GetGUIDLow()
     if draftResourceCache[guid] and not force then
         return draftResourceCache[guid]
     end
 
+    local currentLevel = math.max(1, player:GetLevel() or 1)
     local state = {
         rerolls = STARTING_REROLLS,
         bans = STARTING_BANS,
+        resourceLevel = currentLevel,
     }
 
     local query = CharDBQuery(
-        "SELECT rerolls_left, bans_left FROM spelldraft_draft_resources " ..
-        "WHERE player_guid = " .. guid
+        "SELECT rerolls_left, bans_left, resource_level " ..
+        "FROM spelldraft_draft_resources WHERE player_guid = " .. guid
     )
 
     if query then
         state.rerolls = query:GetUInt32(0)
         state.bans = query:GetUInt32(1)
+        state.resourceLevel = math.max(1, query:GetUInt32(2))
     else
         CharDBExecute(string.format(
             "INSERT IGNORE INTO spelldraft_draft_resources " ..
-            "(player_guid, rerolls_left, bans_left) VALUES (%u, %u, %u)",
-            guid, STARTING_REROLLS, STARTING_BANS
+            "(player_guid, rerolls_left, bans_left, resource_level) " ..
+            "VALUES (%u, %u, %u, %u)",
+            guid, STARTING_REROLLS, STARTING_BANS, currentLevel
         ))
     end
 
@@ -162,10 +275,28 @@ local function SaveDraftResources(guid, state)
     draftResourceCache[guid] = state
 
     CharDBExecute(string.format(
-        "UPDATE spelldraft_draft_resources " ..
-        "SET rerolls_left = %u, bans_left = %u WHERE player_guid = %u",
-        state.rerolls, state.bans, guid
+        "UPDATE spelldraft_draft_resources SET " ..
+        "rerolls_left = %u, bans_left = %u, resource_level = %u " ..
+        "WHERE player_guid = %u",
+        state.rerolls, state.bans, state.resourceLevel, guid
     ))
+end
+
+local function GrantLevelResources(player)
+    local guid = player:GetGUIDLow()
+    local state = LoadDraftResources(player, false)
+    local currentLevel = math.max(1, player:GetLevel() or 1)
+
+    if currentLevel <= state.resourceLevel then
+        return state
+    end
+
+    local gainedLevels = currentLevel - state.resourceLevel
+    state.rerolls = state.rerolls + gainedLevels * REROLLS_PER_LEVEL
+    state.bans = state.bans + gainedLevels * BANS_PER_LEVEL
+    state.resourceLevel = currentLevel
+    SaveDraftResources(guid, state)
+    return state
 end
 
 local function LoadBannedState(guid, force)
@@ -222,15 +353,20 @@ local function LoadPendingOffer(guid, force)
     pendingOfferCache[guid] = nil
 
     local query = CharDBQuery(
-        "SELECT offer_1, offer_2, offer_3 FROM spelldraft_pending_offer " ..
-        "WHERE player_guid = " .. guid
+        "SELECT offer_1, offer_2, offer_3, offer_4, offer_5, offer_size " ..
+        "FROM spelldraft_pending_offer WHERE player_guid = " .. guid
     )
     if not query then
         return nil
     end
 
+    local storedOfferSize = query:GetUInt32(5)
+    if storedOfferSize ~= OFFER_SIZE then
+        return nil
+    end
+
     local offer = {}
-    for column = 0, 2 do
+    for column = 0, MAX_PERSISTED_OFFER_SIZE - 1 do
         local spellId = query:GetUInt32(column)
         if spellId and spellId > 0 then
             table.insert(offer, spellId)
@@ -248,6 +384,8 @@ local function SavePendingOffer(player, offer)
     local one = offer[1] or 0
     local two = offer[2] or 0
     local three = offer[3] or 0
+    local four = offer[4] or 0
+    local five = offer[5] or 0
     local level = player:GetLevel() or 1
 
     pendingOfferLoaded[guid] = true
@@ -255,9 +393,10 @@ local function SavePendingOffer(player, offer)
 
     CharDBExecute(string.format(
         "REPLACE INTO spelldraft_pending_offer " ..
-        "(player_guid, offer_1, offer_2, offer_3, offered_level) " ..
-        "VALUES (%u, %u, %u, %u, %u)",
-        guid, one, two, three, level
+        "(player_guid, offer_1, offer_2, offer_3, offer_4, offer_5, " ..
+        "offer_size, offered_level) " ..
+        "VALUES (%u, %u, %u, %u, %u, %u, %u, %u)",
+        guid, one, two, three, four, five, OFFER_SIZE, level
     ))
 end
 
@@ -337,7 +476,16 @@ local function RequirementsMet(entry, capabilities)
 end
 
 local function RollRarity()
-    local roll = math.random() * 100.0
+    local total = 0.0
+    for rarity = 0, 4 do
+        total = total + (RARITY_DISTRIBUTION[rarity] or 0)
+    end
+
+    if total <= 0 then
+        return 0
+    end
+
+    local roll = math.random() * total
     local cumulative = 0.0
     for rarity = 0, 4 do
         cumulative = cumulative + (RARITY_DISTRIBUTION[rarity] or 0)
@@ -417,7 +565,7 @@ local function SendCompatibilityState(player)
     -- The historical addon calls this state "prestiged". In Aventureros it
     -- simply means that native class-10 SpellDraft is enabled.
     local guid = player:GetGUIDLow()
-    local resources = LoadDraftResources(guid, false)
+    local resources = GrantLevelResources(player)
     local banned = LoadBannedState(guid, false)
 
     player:SendAddonMessage("SpellChoiceStatus", "prestiged", 0, player)
@@ -667,7 +815,7 @@ end
 
 local function HandleReroll(player)
     local guid = player:GetGUIDLow()
-    local resources = LoadDraftResources(guid, false)
+    local resources = GrantLevelResources(player)
 
     if resources.rerolls <= 0 then
         player:SendAddonMessage(
@@ -714,7 +862,7 @@ end
 
 local function HandleBan(player, spellId)
     local guid = player:GetGUIDLow()
-    local resources = LoadDraftResources(guid, false)
+    local resources = GrantLevelResources(player)
     local banned = LoadBannedState(guid, false)
     local offer = LoadPendingOffer(guid, false)
 
@@ -856,7 +1004,8 @@ local function OnLogin(_, player)
 
     local guid = player:GetGUIDLow()
     LoadDraftedState(guid, true)
-    LoadDraftResources(guid, true)
+    LoadDraftResources(player, true)
+    GrantLevelResources(player)
     LoadBannedState(guid, true)
     LoadPendingOffer(guid, true)
     RestoreAndUpgradeDraftedSpells(player)
@@ -880,6 +1029,7 @@ local function OnLevelChanged(_, player)
         return
     end
 
+    GrantLevelResources(player)
     RestoreAndUpgradeDraftedSpells(player)
 
     local guid = player:GetGUIDLow()
@@ -897,8 +1047,15 @@ RegisterPlayerEvent(3, OnLogin)            -- PLAYER_EVENT_ON_LOGIN
 RegisterPlayerEvent(4, OnLogout)           -- PLAYER_EVENT_ON_LOGOUT
 RegisterPlayerEvent(13, OnLevelChanged)    -- PLAYER_EVENT_ON_LEVEL_CHANGE
 
-print(
-    "[Aventureros de Azeroth] Real SpellDraft engine loaded: " ..
-    tostring(#SPELL_POOL) ..
-    " root abilities, 3 starting drafts, 3 rerolls, 3 bans."
-)
+print(string.format(
+    "[Aventureros de Azeroth] Real SpellDraft engine loaded: %u root abilities, " ..
+    "%u starting drafts, first extra at level %u, every %u level(s), " ..
+    "%u rerolls, %u bans, %u-card offers.",
+    #SPELL_POOL,
+    STARTING_DRAFTS,
+    FIRST_ADDITIONAL_DRAFT_LEVEL,
+    LEVELS_PER_DRAFT,
+    STARTING_REROLLS,
+    STARTING_BANS,
+    OFFER_SIZE
+))
