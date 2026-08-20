@@ -102,7 +102,10 @@ def build_lua_block(
     table_body = "\n".join(table_lines)
     faction_body = "\n".join(faction_lines)
 
-    return f'''{BEGIN_MARKER}
+    # Raw f-string is intentional: Lua texture paths need literal double
+    # backslashes. A normal Python f-string consumed one escaping layer and
+    # generated paths such as Interface\AddOns..., which WoW could not resolve.
+    return rf'''{BEGIN_MARKER}
 -- Generated from modules/mod-spelldraft/card_dependencies.json and card_packages.json.
 -- Do not hand-maintain the associations here: rerun patch_client_teaches_ui.py.
 local SPELLDRAFT_TEACHES_BY_CARD = {{
@@ -334,6 +337,12 @@ def main() -> None:
     original = lua_path.read_text(encoding="utf-8")
     patched = patch_spellchoice(original, build_lua_block(teaches, faction_teaches))
 
+    expected_square_path = '"Interface\\\\AddOns\\\\SpellDraft\\\\Textures\\\\SQUARE.tga"'
+    if expected_square_path not in patched:
+        raise SystemExit(
+            "Teach UI patch aborted: generated Lua lost required texture-path escaping"
+        )
+
     backup_path = lua_path.with_suffix(".lua.pre-teaches.bak")
     if not backup_path.exists():
         shutil.copy2(lua_path, backup_path)
@@ -351,6 +360,7 @@ def main() -> None:
     print(f"Paquetes con preview común: {package_count}")
     print(f"Paquetes con preview por facción: {len(faction_teaches)}")
     print("Slots visibles por carta: 4 (el cuarto muestra +N si hay más).")
+    print("SQUARE.tga: ruta Lua validada con escapes dobles.")
 
 
 if __name__ == "__main__":
