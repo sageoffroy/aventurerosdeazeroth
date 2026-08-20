@@ -90,9 +90,9 @@ Decisión de diseño:
 
 Problemas detectados y correcciones aplicadas:
 
-- La primera carta no mostraba a la derecha los iconos/cuadritos de las habilidades que enseña. La búsqueda sobre el AddOn real confirmó que el `SpellChoice` histórico sólo renderiza la carta ofrecida y no conoce nuestro `SpellDraftTeachMap`. Se agregó `AventurerosPackageChoiceUI.lua`, generado desde `card_packages.json`, que dibuja los hechizos enseñados como cuadritos con tooltip a la derecha de cada carta-paquete. También respeta los paquetes por facción.
+- La primera carta no mostraba a la derecha los iconos/cuadritos de las habilidades que enseña. La inspección del AddOn real mostró que ya existía una UI canónica para cartas con `teaches` (`patch_client_teaches_ui.py`). En vez de mantener un segundo overlay, se amplió ese mismo sistema para leer también `card_packages.json`, incluidos los `teaches_by_team`. Así cartas normales y paquetes usan los mismos cuadritos, tooltips y límite visual de cuatro slots con `+N`.
 - La carta mostraba **`Rango 1`** porque `190002` clonaba el subtexto localizado de `Fire Ward`. La finalización genérica de cartas-paquete (`finalize_package_cards.py`) borra los campos Rank/Rango heredados y valida que todos los marcadores sean rankless.
-- `6143 Frost Ward` estaba fuera de la cohorte normalizada original (`max_first_rank_level = 20`). Se amplió la cohorte canónica a **nivel 22**, por lo que Frost Ward ahora usa el ID determinista `206143` y el mismo pipeline de interpolación por nivel que el resto de hechizos normalizados. No se creó un segundo sistema de scaling.
+- `6143 Frost Ward` estaba fuera de la cohorte normalizada original. La cohorte canónica se amplió hasta primer rango de **nivel 22**, por lo que Frost Ward ahora usa el ID determinista `206143` y el mismo pipeline de interpolación por nivel que el resto de hechizos normalizados. El self-test dejó de fijar mágicamente el valor 20 y valida que el cap configurado sea válido, para permitir que la cohorte siga creciendo durante la auditoría sin desactivar controles.
 
 Falta repetir la prueba visual/funcional en juego y confirmar:
 
