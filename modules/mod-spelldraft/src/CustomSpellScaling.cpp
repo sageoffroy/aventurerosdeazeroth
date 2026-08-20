@@ -4,8 +4,10 @@
 #include "Log.h"
 #include "Player.h"
 #include "Random.h"
+#include "ScriptDefines/AllSpellScript.h"
 #include "ScriptDefines/PlayerScript.h"
 #include "Spell.h"
+#include "Unit.h"
 
 #include <array>
 #include <exception>
@@ -117,6 +119,31 @@ int32 ResolveProfiledCastTime(Player const* player, uint32 spellId, int32 fallba
     return rule ? rule->castTimeMs : fallbackCastTime;
 }
 
+void ApplyProfiledSpellValues(Player const* scalingPlayer, Spell* spell)
+{
+    if (!scalingPlayer || !spell)
+        return;
+
+    LevelRule const* rule = FindLevelRule(scalingPlayer, spell->GetSpellInfo()->Id);
+    if (!rule)
+        return;
+
+    for (uint8 effectIndex = 0; effectIndex < 3; ++effectIndex)
+    {
+        EffectRange const& range = rule->effects[effectIndex];
+        if (!range.active)
+            continue;
+
+        int32 value = range.minimum;
+        if (range.maximum > range.minimum)
+            value = irand(range.minimum, range.maximum);
+        spell->SetSpellValue(EffectSpellValueMod(effectIndex), value);
+    }
+
+    if (rule->durationMs > 0)
+        spell->SetSpellValue(SPELLVALUE_AURA_DURATION, rule->durationMs);
+}
+
 bool LoadScalingFile(std::string const& path)
 {
     std::ifstream input(path);
@@ -175,12 +202,15 @@ bool LoadScalingFile(std::string const& path)
                 return false;
             }
 
-            if (spellId < 200000 || spellId > 299999 || level == 0 || level > 255
+            // The same trusted TSV now contains both reserved custom spell IDs
+            // (200000-299999) and explicitly generated native support spell IDs
+            // cast by player-owned summons/guardians.
+            if (spellId == 0 || level == 0 || level > 255
                 || castTimeMs < 0 || durationMs < 0)
             {
                 LOG_ERROR(
                     "module.SpellDraft",
-                    "Aventureros de Azeroth: invalid normalized spell ID/level/cast/duration on row {} in {}",
+                    "Aventureros de Azeroth: invalid spell ID/level/cast/duration on row {} in {}",
                     lineNumber,
                     path
                 );
@@ -200,7 +230,7 @@ bool LoadScalingFile(std::string const& path)
                 {
                     LOG_ERROR(
                         "module.SpellDraft",
-                        "Aventureros de Azeroth: invalid normalized effect range on row {} in {}",
+                        "Aventureros de Azeroth: invalid effect range on row {} in {}",
                         lineNumber,
                         path
                     );
@@ -215,7 +245,7 @@ bool LoadScalingFile(std::string const& path)
             {
                 LOG_ERROR(
                     "module.SpellDraft",
-                    "Aventureros de Azeroth: duplicate normalized spell/level {}:{} in {}",
+                    "Aventureros de Azeroth: duplicate spell/level {}:{} in {}",
                     spellId,
                     level,
                     path
@@ -254,7 +284,7 @@ bool LoadScalingFile(std::string const& path)
         {
             LOG_ERROR(
                 "module.SpellDraft",
-                "Aventureros de Azeroth: normalized spell {} has no level rows in {}",
+                "Aventureros de Azeroth: scaled spell {} has no level rows in {}",
                 spellId,
                 path
             );
@@ -267,7 +297,7 @@ bool LoadScalingFile(std::string const& path)
             {
                 LOG_ERROR(
                     "module.SpellDraft",
-                    "Aventureros de Azeroth: normalized spell {} is missing level {} in {}",
+                    "Aventureros de Azeroth: scaled spell {} is missing level {} in {}",
                     spellId,
                     level,
                     path
@@ -280,7 +310,7 @@ bool LoadScalingFile(std::string const& path)
     g_customScaling = std::move(loaded);
     LOG_INFO(
         "module.SpellDraft",
-        "Aventureros de Azeroth: loaded profile-aware scaling for {} custom spells ({} level rows).",
+        "Aventureros de Azeroth: loaded profile-aware scaling for {} spells ({} level rows).",
         g_customScaling.size(),
         levelRows
     );
@@ -297,27 +327,35 @@ public:
 
     void OnPlayerSpellCast(Player* player, Spell* spell, bool /*skipCheck*/) override
     {
-        if (!player || !spell)
+        ApplyProfiledSpellValues(player, spell);
+    }
+};
+
+class SpellDraftOwnerScaledSupportSpellScript : public AllSpellScript
+{
+public:
+    SpellDraftOwnerScaledSupportSpellScript()
+        : AllSpellScript("SpellDraftOwnerScaledSupportSpellScript", { ALLSPELLHOOK_ON_CAST })
+    {
+    }
+
+    void OnSpellCast(
+        Spell* spell,
+        Unit* caster,
+        SpellInfo const* /*spellInfo*/,
+        bool /*skipCheck*/) override
+    {
+        // Player casts are already handled by the existing PlayerScript. This
+        // hook is only for pets/guardians/controlled creatures whose owner is a
+        // player. Undeclared summon spells have no TSV row and are untouched.
+        if (!caster || caster->IsPlayer())
             return;
 
-        LevelRule const* rule = FindLevelRule(player, spell->GetSpellInfo()->Id);
-        if (!rule)
+        Player* owner = caster->GetCharmerOrOwnerPlayerOrPlayerItself();
+        if (!owner)
             return;
 
-        for (uint8 effectIndex = 0; effectIndex < 3; ++effectIndex)
-        {
-            EffectRange const& range = rule->effects[effectIndex];
-            if (!range.active)
-                continue;
-
-            int32 value = range.minimum;
-            if (range.maximum > range.minimum)
-                value = irand(range.minimum, range.maximum);
-            spell->SetSpellValue(EffectSpellValueMod(effectIndex), value);
-        }
-
-        if (rule->durationMs > 0)
-            spell->SetSpellValue(SPELLVALUE_AURA_DURATION, rule->durationMs);
+        ApplyProfiledSpellValues(owner, spell);
     }
 };
 }
@@ -350,4 +388,5 @@ void ConfigureCustomSpellScaling(bool enabled)
 void AddCustomSpellScalingScripts()
 {
     new SpellDraftCustomScalingPlayerScript();
+    new SpellDraftOwnerScaledSupportSpellScript();
 }
