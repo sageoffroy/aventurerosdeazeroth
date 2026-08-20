@@ -93,6 +93,7 @@ end
 
 local SPELL_POOL = SpellDraftCatalog or {}
 local TEACH_MAP = SpellDraftTeachMap or {}
+local TEACH_TEAM_MAP = SpellDraftTeachTeamMap or {}
 local GENERATED_RARITY_DISTRIBUTION = SpellDraftRarityDistribution or {
     [0] = 70.0,
     [1] = 20.0,
@@ -153,6 +154,13 @@ for _, taught in pairs(TEACH_MAP) do
         TAUGHT_ROOTS[nativeRoot] = true
     end
 end
+for _, taughtByTeam in pairs(TEACH_TEAM_MAP) do
+    for _, taught in pairs(taughtByTeam) do
+        for _, nativeRoot in ipairs(taught) do
+            TAUGHT_ROOTS[nativeRoot] = true
+        end
+    end
+end
 
 local function NativeRootForRuntimeId(spellId)
     if spellId >= CUSTOM_SPELL_OFFSET and spellId <= CUSTOM_SPELL_MAX then
@@ -168,6 +176,56 @@ end
 
 local function IsTaughtEntry(entry)
     return entry and TAUGHT_ROOTS[NativeRootForRuntimeId(entry.id)] == true
+end
+
+local function ListContains(values, expected)
+    for _, value in ipairs(values or {}) do
+        if value == expected then
+            return true
+        end
+    end
+    return false
+end
+
+local function EligibilityRulesMet(player, entry)
+    if not player or not entry then
+        return false
+    end
+
+    local races = entry.races or {}
+    if #races > 0 and not ListContains(races, player:GetRace()) then
+        return false
+    end
+
+    local teams = entry.teams or {}
+    if #teams > 0 and not ListContains(teams, player:GetTeam()) then
+        return false
+    end
+
+    return true
+end
+
+local function TaughtRootsForPlayer(player, nativeRoot)
+    local roots = {}
+    local seen = {}
+
+    local function Append(values)
+        for _, taughtRoot in ipairs(values or {}) do
+            if not seen[taughtRoot] then
+                seen[taughtRoot] = true
+                table.insert(roots, taughtRoot)
+            end
+        end
+    end
+
+    Append(TEACH_MAP[nativeRoot])
+
+    local byTeam = TEACH_TEAM_MAP[nativeRoot]
+    if byTeam and player then
+        Append(byTeam[player:GetTeam()])
+    end
+
+    return roots
 end
 
 -- ALE database Execute calls are queued. Keep authoritative per-session caches
@@ -473,7 +531,7 @@ local function PlayerHasAnyRank(player, entry)
     return false
 end
 
-local function AddCapabilitiesFromEntry(entry, capabilities, visited)
+local function AddCapabilitiesFromEntry(player, entry, capabilities, visited)
     if not entry or visited[entry.id] then
         return
     end
@@ -485,8 +543,9 @@ local function AddCapabilitiesFromEntry(entry, capabilities, visited)
     end
 
     local nativeRoot = NativeRootForRuntimeId(entry.id)
-    for _, taughtRoot in ipairs(TEACH_MAP[nativeRoot] or {}) do
+    for _, taughtRoot in ipairs(TaughtRootsForPlayer(player, nativeRoot)) do
         AddCapabilitiesFromEntry(
+            player,
             EntryForNativeRoot(taughtRoot),
             capabilities,
             visited
@@ -494,12 +553,13 @@ local function AddCapabilitiesFromEntry(entry, capabilities, visited)
     end
 end
 
-local function BuildCapabilities(state)
+local function BuildCapabilities(player, state)
     local capabilities = {}
     local visited = {}
 
     for spellId, _ in pairs(state.set or {}) do
         AddCapabilitiesFromEntry(
+            player,
             POOL_BY_ID[spellId],
             capabilities,
             visited
@@ -571,7 +631,7 @@ local function BuildCandidates(player, excluded, allowExcludedSpellId)
     local guid = player:GetGUIDLow()
     local state = LoadDraftedState(guid, false)
     local banned = LoadBannedState(guid, false)
-    local capabilities = BuildCapabilities(state)
+    local capabilities = BuildCapabilities(player, state)
     local queryLevel = EligibilityLevel(player)
     local candidates = {}
 
@@ -581,6 +641,7 @@ local function BuildCandidates(player, excluded, allowExcludedSpellId)
 
         if entry.minLevel <= queryLevel
             and not IsTaughtEntry(entry)
+            and EligibilityRulesMet(player, entry)
             and RequirementsMet(entry, capabilities)
             and not state.set[entry.id]
             and not banned.set[entry.id]
@@ -690,12 +751,13 @@ local function OfferIsCurrent(player, offer)
     local guid = player:GetGUIDLow()
     local state = LoadDraftedState(guid, false)
     local banned = LoadBannedState(guid, false)
-    local capabilities = BuildCapabilities(state)
+    local capabilities = BuildCapabilities(player, state)
 
     for _, spellId in ipairs(offer) do
         local entry = POOL_BY_ID[spellId]
         if not entry
             or IsTaughtEntry(entry)
+            or not EligibilityRulesMet(player, entry)
             or state.set[spellId]
             or banned.set[spellId]
             or not RequirementsMet(entry, capabilities) then
@@ -818,7 +880,7 @@ local function LearnDraftedEntry(player, entry)
         LearnEntryRanks(player, current)
 
         local nativeRoot = NativeRootForRuntimeId(current.id)
-        for _, taughtRoot in ipairs(TEACH_MAP[nativeRoot] or {}) do
+        for _, taughtRoot in ipairs(TaughtRootsForPlayer(player, nativeRoot)) do
             local taughtEntry = EntryForNativeRoot(taughtRoot)
 
             if taughtEntry then
@@ -872,8 +934,9 @@ local function AcceptPick(player, spellId)
         return
     end
 
-    local capabilities = BuildCapabilities(state)
-    if not RequirementsMet(entry, capabilities) then
+    local capabilities = BuildCapabilities(player, state)
+    if not EligibilityRulesMet(player, entry)
+        or not RequirementsMet(entry, capabilities) then
         ClearPendingOffer(guid)
         EnsureAndSendOffer(player)
         return
