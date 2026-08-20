@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare Aventureros runtime, then apply project SpellDraft package cards."""
+"""Prepare Aventureros runtime, then apply SpellDraft packages and audit pool."""
 
 from __future__ import annotations
 
@@ -74,6 +74,16 @@ def main() -> None:
         str(resolved),
     )
 
+    # The audit whitelist is deliberately applied only to the generated runtime
+    # catalog. Source metadata and dependency entries remain intact and are
+    # restored automatically by the next preparation run.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "apply_audit_pool.py"),
+        "--catalog",
+        str(runtime_catalog),
+    )
+
     # prepare_first_run already built the client patch once. Build/install it
     # again so the final MPQ contains the passive package marker plus the final
     # reagentless portal and reviewed travel-spell DBC data applied above.
@@ -119,6 +129,7 @@ def main() -> None:
     print("Ensenia solo los Portales de la faccion del personaje, mas Dalaran.")
     print("Los Portales no requieren componentes; Teleports/Portals individuales quedan fuera del pool.")
     print("Teleport: Moonglade usa el ID nativo y solo es elegible para Elfos de la Noche.")
+    print("Audit pool: si audit_pool.json esta habilitado, solo ofrece su whitelist.")
 
 
 if __name__ == "__main__":
