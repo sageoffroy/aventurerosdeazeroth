@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "rules": [
+    {
+      "native_root": 18960,
+      "name": "Teleport: Moonglade",
+      "races": [4],
+      "force_native": true,
+      "reason": "Lore restriction: only Night Elves may draft Teleport: Moonglade. The native spell ID is required because spell_target_position is keyed by the native spell."
+    }
+  ]
+}
