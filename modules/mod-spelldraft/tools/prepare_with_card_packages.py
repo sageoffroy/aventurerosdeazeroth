@@ -75,8 +75,8 @@ def main() -> None:
     )
 
     # prepare_first_run already built the client patch once. Build/install it
-    # again so the final MPQ contains the virtual package row and reagentless
-    # portal Spell.dbc data applied immediately above.
+    # again so the final MPQ contains the passive package marker plus the final
+    # reagentless portal and reviewed travel-spell DBC data applied above.
     run(
         sys.executable,
         str(TOOLS_DIR / "build_adventurer_client_patch.py"),
@@ -115,10 +115,10 @@ def main() -> None:
 
     print()
     print("Preparacion con paquetes completa.")
-    print("Maestro de Portales: carta virtual Epic nivel 1, icono Portal: Stormwind.")
-    print("Ensenia todos los Portales y elimina sus requisitos de componentes.")
-    print("Teleports y Portals individuales quedan fuera del pool de cartas.")
-    print("La carta de paquete no permanece aprendida en el libro de hechizos.")
+    print("Maestro de Portales: carta pasiva Epic nivel 1, icono Portal: Stormwind.")
+    print("Ensenia solo los Portales de la faccion del personaje, mas Dalaran.")
+    print("Los Portales no requieren componentes; Teleports/Portals individuales quedan fuera del pool.")
+    print("Teleport: Moonglade usa el ID nativo y solo es elegible para Elfos de la Noche.")
 
 
 if __name__ == "__main__":
