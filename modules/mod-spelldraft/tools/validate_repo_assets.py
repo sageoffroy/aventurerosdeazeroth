@@ -22,6 +22,9 @@ SPELLDRAFT_CHARACTER_SQL = (
 SPELLDRAFT_DETERMINISTIC_ID_SQL = (
     REPO / "data/sql/updates/pending_db_characters/rev_1787166000000000000.sql"
 )
+SPELLDRAFT_CONFIG_SQL = (
+    REPO / "data/sql/updates/pending_db_characters/rev_1787197860000000000.sql"
+)
 SPELL_RANKS_SQL = REPO / "data/sql/base/db_world/spell_ranks.sql"
 sys.path.insert(0, str(TOOLS))
 
@@ -132,6 +135,14 @@ def validate_sql() -> None:
             "character SQL persists drafted spells")
     require("CREATE TABLE IF NOT EXISTS `spelldraft_pending_offer`" in character_sql,
             "character SQL persists the pending offer")
+
+    config_sql = read(SPELLDRAFT_CONFIG_SQL)
+    require("`offer_4`" in config_sql and "`offer_5`" in config_sql,
+            "character SQL supports five-card offers")
+    require("`offer_size`" in config_sql,
+            "character SQL tracks the configured pending-offer size")
+    require("`resource_level`" in config_sql,
+            "character SQL tracks level-based reroll/ban grants")
 
     deterministic_id_sql = read(SPELLDRAFT_DETERMINISTIC_ID_SQL)
 
@@ -381,12 +392,23 @@ def validate_draft_engine() -> None:
     draft = read(MODULE / "lua/SpellDraft/draft.lua")
     expectations = {
         "local CLASS_ADVENTURER = 10": "draft engine is class-10-only",
-        "local STARTING_DRAFTS = 3": "Adventurer starts with three drafts",
-        "local DRAFTS_PER_ADDITIONAL_LEVEL = 10": "additional levels currently grant ten drafts",
-        "local LOW_LEVEL_POOL_FLOOR = 20": "level 1 uses the historical level-20 pool floor",
+        "GetConfigValue": "draft gameplay tuning reads worldserver configuration",
+        '"SpellDraft.StartingDrafts"': "starting drafts are configurable",
+        '"SpellDraft.FirstAdditionalDraftLevel"': "first additional draft level is configurable",
+        '"SpellDraft.LevelsPerDraft"': "draft level interval is configurable",
+        '"SpellDraft.DraftsPerMilestone"': "drafts per milestone are configurable",
+        '"SpellDraft.MaxDraftedSpells"': "maximum drafted spells is configurable",
+        '"SpellDraft.StartingRerolls"': "starting rerolls are configurable",
+        '"SpellDraft.StartingBans"': "starting bans are configurable",
+        '"SpellDraft.RerollsPerLevel"': "reroll level grants are configurable",
+        '"SpellDraft.BansPerLevel"': "ban level grants are configurable",
+        '"SpellDraft.OfferSize"': "offer size is configurable",
+        "MAX_PERSISTED_OFFER_SIZE = 5": "runtime supports up to five cards per offer",
+        '"SpellDraft.LowLevelPoolFloor"': "low-level pool floor is configurable",
+        '"SpellDraft.Rarity.Legendary"': "rarity weights are configurable",
         'dofile(parentPath .. "catalog.lua")': "runtime loads the generated real catalog",
         "RollRarity": "offers use rarity-weighted selection",
-        "RARITY_DISTRIBUTION": "runtime consumes generated rarity weights",
+        "RARITY_DISTRIBUTION": "runtime consumes configured rarity weights",
         "PlayerHasAnyRank": "known rank families are not redrafted",
         "RestoreAndUpgradeDraftedSpells": "drafted rank families upgrade as the player levels",
         'msg == "SC_CHECK"': "historical addon SC_CHECK protocol is supported",
@@ -394,6 +416,8 @@ def validate_draft_engine() -> None:
         'player:SendAddonMessage("SpellChoice"': "server sends card offers to the existing addon",
         "spelldraft_drafted_spells": "draft picks use new persistence",
         "spelldraft_pending_offer": "pending offers survive reconnects",
+        "offer_4, offer_5, offer_size": "five-card pending offers are persisted",
+        "resource_level": "resource grants remember the highest processed level",
         "local draftedCache = {}": "draft picks are cached against async DB races",
         "local pendingOfferCache = {}": "pending offers are cached against async DB races",
         "RegisterPlayerEvent(19, OnProtocolWhisper)": "self-whisper protocol hook is registered",
@@ -401,6 +425,31 @@ def validate_draft_engine() -> None:
     }
     for token, label in expectations.items():
         require(token in draft, label)
+
+    config = read(MODULE / "conf/SpellDraft.conf.dist")
+    config_keys = (
+        "SpellDraft.Enable",
+        "SpellDraft.StartingDrafts",
+        "SpellDraft.FirstAdditionalDraftLevel",
+        "SpellDraft.LevelsPerDraft",
+        "SpellDraft.DraftsPerMilestone",
+        "SpellDraft.MaxDraftedSpells",
+        "SpellDraft.OfferSize",
+        "SpellDraft.LowLevelPoolFloor",
+        "SpellDraft.StartingRerolls",
+        "SpellDraft.StartingBans",
+        "SpellDraft.RerollsPerLevel",
+        "SpellDraft.BansPerLevel",
+        "SpellDraft.Rarity.Common",
+        "SpellDraft.Rarity.Uncommon",
+        "SpellDraft.Rarity.Rare",
+        "SpellDraft.Rarity.Epic",
+        "SpellDraft.Rarity.Legendary",
+    )
+    for key in config_keys:
+        require(key in config, f"SpellDraft config exposes {key}")
+    require("Prestige." not in config,
+            "SpellDraft config contains no unused Prestige settings")
 
     require("local SPELL_POOL = {" not in draft,
             "hardcoded bootstrap spell pool has been removed")
