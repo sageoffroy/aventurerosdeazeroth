@@ -82,13 +82,19 @@ Decisión de diseño:
 - Una sola carta reemplaza a **Resguardo de Fuego** y **Resguardo de Escarcha** como elecciones independientes del draft.
 - Al elegirla se aprenden las dos habilidades activas:
   - `200543` — Resguardo de Fuego normalizado.
-  - `6143` — Resguardo de Escarcha.
+  - `6143` — Resguardo de Escarcha, todavía nativo/rankeado en la cohorte actual.
 - La carta `190002 Resguardo Elemental` queda como marcador pasivo en el libro de hechizos; las dos habilidades enseñadas son las que se usan activamente.
 - `543/200543 Fire Ward` y `6143 Frost Ward` quedan fuera del pool como cartas independientes.
 - Usa como icono de referencia el de `Fire Ward (543)`.
 - Rareza configurada temporalmente como **Uncommon**; se revisará en la pasada final de balance.
 
-Falta validar en juego que al obtener la carta se aprendan ambos resguardos y funcionen correctamente.
+Problemas detectados en la primera prueba visual:
+
+- La carta no muestra a la derecha los iconos/cuadritos de las habilidades que enseña, a diferencia de otras cartas con `teach`. Hay que integrar el paquete con la metadata/protocolo de preview del AddOn histórico, no sólo con `SpellDraftTeachMap` del servidor.
+- La carta mostraba **`Rango 1`** porque el marcador `190002` clonaba el subtexto localizado del `Fire Ward` nativo. Se agregó una finalización genérica de cartas-paquete para borrar Rank/Rango heredado.
+- `200543 Fire Ward` sí pertenece al pipeline normalizado. `6143 Frost Ward` todavía no; antes de aprobar el paquete hay que resolver su normalización/rankless scaling para que no quede atado a rangos nativos.
+
+No marcar APROBADO hasta cerrar esos dos puntos: preview de `teach` y Frost Ward normalizado.
 
 ---
 
