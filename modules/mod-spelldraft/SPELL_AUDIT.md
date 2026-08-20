@@ -96,6 +96,23 @@ Prueba directa:
 .learn 201459
 ```
 
+### 190003 — Manipulación Mágica
+
+**Estado:** REVISANDO
+
+Decisión de diseño:
+
+- Una sola carta comprime **Amplificar magia** y **Atenuar magia**.
+- Al elegirla se aprenden las dos habilidades activas normalizadas:
+  - `201008` — Amplificar magia (raíz nativa `1008`).
+  - `200604` — Atenuar magia (raíz nativa `604`).
+- Las dos habilidades dejan de aparecer como elecciones independientes del draft porque pasan a pertenecer al `TeachMap` del paquete.
+- La carta `190003 Manipulación Mágica` queda como marcador pasivo/rankless y usa `Amplify Magic (1008)` como fuente temporal de icono/presentación.
+- Rareza temporal: **Uncommon**; se revisará junto con el balance final.
+- La UI canónica de `teaches` debe mostrar los dos cuadritos a la derecha automáticamente, igual que Resguardo Elemental.
+
+Falta prueba funcional en juego antes de aprobarla.
+
 ---
 
 ## PENDIENTES DE AUDITORÍA
@@ -105,12 +122,9 @@ Por ahora **no se consideran aprobados** aunque estén presentes en la whitelist
 - `200116` — Frostbolt
 - `200133` — Fireball
 - `200168` — Frost Armor
-- `200604` — Dampen Magic
-- `201008` — Amplify Magic
 
 ### Bloques de diseño pendientes
 
-- **Amplify Magic + Dampen Magic**: decidir si quedan separados o se comprimen.
 - **Armaduras** (`Frost Armor`, `Ice Armor`, `Mage Armor`, `Molten Armor`): conservar como elecciones de build salvo evidencia en contrario.
 - Duplicados de `Molten Armor` requieren inspección técnica antes de decidir.
 
