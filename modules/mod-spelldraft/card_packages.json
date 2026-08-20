@@ -58,13 +58,10 @@
       "min_level": 1,
       "passive_marker": true,
       "remove_item_requirements": false,
-      "exclude_from_pool": [
-        543,
-        6143
-      ],
+      "exclude_from_pool": [],
       "teaches": [
         200543,
-        6143
+        206143
       ],
       "teaches_by_team": {}
     }
