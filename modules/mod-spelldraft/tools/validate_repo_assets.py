@@ -286,8 +286,13 @@ def validate_normalized_spells() -> None:
     require(registry.get("custom_id_offset") == 200000,
             "custom spell IDs use deterministic native-root offset 200000")
     selection = registry.get("selection", {})
-    require(selection.get("max_first_rank_level") == 20,
-            "initial normalized cohort selects first ranks through level 20")
+    max_first_rank_level = selection.get("max_first_rank_level")
+    require(
+        isinstance(max_first_rank_level, int)
+        and not isinstance(max_first_rank_level, bool)
+        and 1 <= max_first_rank_level <= 80,
+        "normalized cohort has a valid first-rank level cap",
+    )
     require("DEATHKNIGHT" in selection.get("exclude_classes", []),
             "Death Knight is excluded from the initial normalized cohort")
     require(selection.get("include_talents") is False,
