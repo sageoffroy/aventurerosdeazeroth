@@ -1,17 +1,16 @@
 {
   "version": 1,
   "enabled": true,
-  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. Only offerable draft-card IDs in spells[] are eligible while enabled. For the current Mage pass, only Maestro de Portales is approved; the remaining Mage cards are under review.",
+  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. Only offerable draft-card IDs in spells[] are eligible while enabled. For the current Mage pass, Maestro de Portales is approved; the remaining Mage cards are under review.",
   "spells": [
     { "id": 190001, "name": "Maestro de Portales", "status": "approved" },
+    { "id": 190002, "name": "Resguardo Elemental", "status": "reviewing" },
     { "id": 200116, "name": "Frostbolt", "status": "reviewing" },
     { "id": 200133, "name": "Fireball", "status": "reviewing" },
     { "id": 200168, "name": "Frost Armor", "status": "reviewing" },
-    { "id": 200543, "name": "Fire Ward", "status": "reviewing" },
     { "id": 200604, "name": "Dampen Magic", "status": "reviewing" },
     { "id": 201008, "name": "Amplify Magic", "status": "reviewing" },
-    { "id": 201459, "name": "Arcane Intellect", "status": "reviewing" },
-    { "id": 6143, "name": "Frost Ward", "status": "reviewing" }
+    { "id": 201459, "name": "Arcane Intellect", "status": "reviewing" }
   ],
   "reviewed_test_ids": []
 }
