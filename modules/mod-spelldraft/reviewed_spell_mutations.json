@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "mutations": [
+    {
+      "native_root": 1459,
+      "name": "Arcane Intellect",
+      "behavior_source_spell_id": 23028,
+      "copy_group_behavior": true,
+      "copy_duration": true,
+      "clear_item_requirements": true,
+      "description": "Aumenta el Intelecto de todos los miembros del grupo y banda en $s1 durante $d.",
+      "exclude_from_pool": [23028],
+      "reason": "Keep Arcane Intellect identity/icon and normalized scaling, but use Arcane Brilliance group/raid targeting and one-hour duration. Arcane Brilliance is no longer a separate draft card."
+    }
+  ]
+}
