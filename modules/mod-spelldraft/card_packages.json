@@ -47,6 +47,26 @@
           49361
         ]
       }
+    },
+    {
+      "card_id": 190002,
+      "source_spell_id": 543,
+      "name": "Resguardo Elemental",
+      "description": "Aprendes Resguardo de Fuego y Resguardo de Escarcha.",
+      "rarity": 1,
+      "class_set": 3,
+      "min_level": 1,
+      "passive_marker": true,
+      "remove_item_requirements": false,
+      "exclude_from_pool": [
+        543,
+        6143
+      ],
+      "teaches": [
+        200543,
+        6143
+      ],
+      "teaches_by_team": {}
     }
   ]
 }
