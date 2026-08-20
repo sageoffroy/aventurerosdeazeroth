@@ -12,13 +12,14 @@ CALL_MARKER = "        -- SPELLDRAFT_TEACHES_UI_UPDATE\n        UpdateTeachSlots
 
 CUSTOM_SPELL_OFFSET = 200000
 CUSTOM_SPELL_MAX = 299999
+TEAM_TO_FACTION = {0: "Alliance", 1: "Horde"}
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Instala en el SpellChoice.lua vivo la UI de habilidades asociadas "
-            "usando card_dependencies.json como fuente de verdad."
+            "usando card_dependencies.json y card_packages.json como fuentes de verdad."
         )
     )
     parser.add_argument(
@@ -29,31 +30,87 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_teaches(repo_root: Path) -> dict[int, list[int]]:
+def unique_ids(values: list[int]) -> list[int]:
+    result: list[int] = []
+    for value in values:
+        value = int(value)
+        if value > 0 and value not in result:
+            result.append(value)
+    return result
+
+
+def load_teaches(
+    repo_root: Path,
+) -> tuple[dict[int, list[int]], dict[int, dict[str, list[int]]]]:
     dependencies_path = repo_root / "modules/mod-spelldraft/card_dependencies.json"
-    data = json.loads(dependencies_path.read_text(encoding="utf-8"))
+    dependency_data = json.loads(dependencies_path.read_text(encoding="utf-8"))
 
     teaches: dict[int, list[int]] = {}
-    for root_text, meta in data.get("cards", {}).items():
+    for root_text, meta in dependency_data.get("cards", {}).items():
         taught = meta.get("teaches") or []
         if taught:
-            teaches[int(root_text)] = [int(spell_id) for spell_id in taught]
-    return teaches
+            teaches[int(root_text)] = unique_ids([int(spell_id) for spell_id in taught])
+
+    packages_path = repo_root / "modules/mod-spelldraft/card_packages.json"
+    package_data = json.loads(packages_path.read_text(encoding="utf-8"))
+    if package_data.get("schema_version") != 1:
+        raise RuntimeError(f"{packages_path}: schema_version inválido")
+
+    faction_teaches: dict[int, dict[str, list[int]]] = {}
+    for package in package_data.get("packages", []):
+        card_id = int(package["card_id"])
+        common = unique_ids([int(spell_id) for spell_id in package.get("teaches", [])])
+        if common:
+            teaches[card_id] = common
+
+        by_faction: dict[str, list[int]] = {}
+        for raw_team, values in (package.get("teaches_by_team") or {}).items():
+            team = int(raw_team)
+            faction = TEAM_TO_FACTION.get(team)
+            if faction is None:
+                raise RuntimeError(
+                    f"{packages_path}: package {card_id} usa team no soportado {team}"
+                )
+            cleaned = unique_ids([int(spell_id) for spell_id in values])
+            if cleaned:
+                by_faction[faction] = cleaned
+        if by_faction:
+            faction_teaches[card_id] = by_faction
+
+    return teaches, faction_teaches
 
 
-def build_lua_block(teaches: dict[int, list[int]]) -> str:
+def build_lua_block(
+    teaches: dict[int, list[int]],
+    faction_teaches: dict[int, dict[str, list[int]]],
+) -> str:
     table_lines = []
     for root in sorted(teaches):
         ids = ", ".join(str(spell_id) for spell_id in teaches[root])
         table_lines.append(f"  [{root}] = {{{ids}}},")
 
+    faction_lines = []
+    for card_id in sorted(faction_teaches):
+        faction_lines.append(f"  [{card_id}] = {{")
+        for faction in ("Alliance", "Horde"):
+            ids = faction_teaches[card_id].get(faction)
+            if ids:
+                encoded = ", ".join(str(spell_id) for spell_id in ids)
+                faction_lines.append(f'    ["{faction}"] = {{{encoded}}},')
+        faction_lines.append("  },")
+
     table_body = "\n".join(table_lines)
+    faction_body = "\n".join(faction_lines)
 
     return f'''{BEGIN_MARKER}
--- Generated from modules/mod-spelldraft/card_dependencies.json.
+-- Generated from modules/mod-spelldraft/card_dependencies.json and card_packages.json.
 -- Do not hand-maintain the associations here: rerun patch_client_teaches_ui.py.
-local SPELLDRAFT_TEACHES_BY_NATIVE_ROOT = {{
+local SPELLDRAFT_TEACHES_BY_CARD = {{
 {table_body}
+}}
+
+local SPELLDRAFT_TEACHES_BY_FACTION = {{
+{faction_body}
 }}
 
 local TEACH_SLOT_COUNT = 4
@@ -63,12 +120,44 @@ local TEACH_SLOT_X = 188
 local TEACH_SLOT_Y = -78
 local TEACH_SLOT_STEP = 42
 
-local function GetCardNativeRoot(spellID)
+local function GetTeachLookupID(spellID)
   spellID = tonumber(spellID) or 0
+
+  -- 190xxx package IDs are already their authored card identity.
+  if spellID >= 190000 and spellID <= 199999 then
+    return spellID
+  end
+
+  -- Normalized 200xxx cards reuse dependency metadata authored on the native root.
   if spellID >= {CUSTOM_SPELL_OFFSET} and spellID <= {CUSTOM_SPELL_MAX} then
     return spellID - {CUSTOM_SPELL_OFFSET}
   end
   return spellID
+end
+
+local function AppendUniqueSpellIDs(target, seen, values)
+  for _, spellID in ipairs(values or {{}}) do
+    if spellID and spellID > 0 and not seen[spellID] then
+      seen[spellID] = true
+      table.insert(target, spellID)
+    end
+  end
+end
+
+local function GetCardTeaches(cardSpellID)
+  local lookupID = GetTeachLookupID(cardSpellID)
+  local result = {{}}
+  local seen = {{}}
+
+  AppendUniqueSpellIDs(result, seen, SPELLDRAFT_TEACHES_BY_CARD[lookupID])
+
+  local byFaction = SPELLDRAFT_TEACHES_BY_FACTION[lookupID]
+  if byFaction then
+    local faction = UnitFactionGroup("player")
+    AppendUniqueSpellIDs(result, seen, byFaction[faction])
+  end
+
+  return result
 end
 
 local function EnsureTeachSlots(btn)
@@ -143,8 +232,7 @@ end
 local function UpdateTeachSlots(btn, cardSpellID)
   EnsureTeachSlots(btn)
 
-  local nativeRoot = GetCardNativeRoot(cardSpellID)
-  local teaches = SPELLDRAFT_TEACHES_BY_NATIVE_ROOT[nativeRoot] or {{}}
+  local teaches = GetCardTeaches(cardSpellID)
 
   for slotIndex = 1, TEACH_SLOT_COUNT do
     local slot = btn.teachSlots[slotIndex]
@@ -237,14 +325,14 @@ def main() -> None:
             f"No existe {square_path}. Copiá SQUARE.tga a Textures antes de instalar la UI."
         )
 
-    teaches = load_teaches(repo_root)
+    teaches, faction_teaches = load_teaches(repo_root)
     if 1515 not in teaches:
         raise SystemExit(
             "card_dependencies.json no contiene teaches para Domesticar bestia (1515)."
         )
 
     original = lua_path.read_text(encoding="utf-8")
-    patched = patch_spellchoice(original, build_lua_block(teaches))
+    patched = patch_spellchoice(original, build_lua_block(teaches, faction_teaches))
 
     backup_path = lua_path.with_suffix(".lua.pre-teaches.bak")
     if not backup_path.exists():
@@ -252,6 +340,7 @@ def main() -> None:
 
     lua_path.write_text(patched, encoding="utf-8")
 
+    package_count = sum(1 for card_id in teaches if 190000 <= card_id <= 199999)
     print(f"OK: {lua_path}")
     print(f"Backup: {backup_path}")
     print(
@@ -259,6 +348,8 @@ def main() -> None:
         + ", ".join(str(spell_id) for spell_id in teaches[1515])
     )
     print(f"Asociaciones instaladas: {len(teaches)}")
+    print(f"Paquetes con preview común: {package_count}")
+    print(f"Paquetes con preview por facción: {len(faction_teaches)}")
     print("Slots visibles por carta: 4 (el cuarto muestra +N si hay más).")
 
 
