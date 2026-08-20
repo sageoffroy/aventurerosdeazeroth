@@ -7,10 +7,11 @@
       "behavior_source_spell_id": 23028,
       "copy_group_behavior": true,
       "copy_duration": true,
+      "fixed_runtime_duration_ms": 3600000,
       "clear_item_requirements": true,
       "description": "Aumenta el Intelecto de todos los miembros del grupo y banda en $s1 durante $d.",
       "exclude_from_pool": [23028],
-      "reason": "Keep Arcane Intellect identity/icon and normalized scaling, but use Arcane Brilliance group/raid targeting and one-hour duration. Arcane Brilliance is no longer a separate draft card."
+      "reason": "Keep Arcane Intellect identity/icon and normalized scaling, but use Arcane Brilliance group/raid targeting and a fixed one-hour runtime duration. The explicit runtime duration is required because normalized scaling otherwise reapplies Arcane Intellect's original 30-minute duration at cast time. Arcane Brilliance is no longer a separate draft card."
     }
   ]
 }
