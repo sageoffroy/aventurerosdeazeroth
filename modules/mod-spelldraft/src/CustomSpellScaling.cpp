@@ -7,6 +7,8 @@
 #include "ScriptDefines/AllSpellScript.h"
 #include "ScriptDefines/PlayerScript.h"
 #include "Spell.h"
+#include "SpellInfo.h"
+#include "SpellMgr.h"
 #include "Unit.h"
 
 #include <array>
@@ -44,8 +46,98 @@ struct LevelRule
 
 using SpellLevels = std::vector<LevelRule>;
 
+constexpr uint32 CUSTOM_SPELL_MIN = 200000;
+constexpr uint32 CUSTOM_SPELL_MAX = 299999;
+
+struct NativeEffectBackup
+{
+    bool active = false;
+    int32 dieSides = 0;
+    float realPointsPerLevel = 0.0f;
+};
+
+using NativeSpellBackup = std::array<NativeEffectBackup, 3>;
+
 bool g_customScalingEnabled = false;
 std::unordered_map<uint32, SpellLevels> g_customScaling;
+std::unordered_map<uint32, NativeSpellBackup> g_nativeSupportBackups;
+
+bool IsCustomSpellId(uint32 spellId)
+{
+    return spellId >= CUSTOM_SPELL_MIN && spellId <= CUSTOM_SPELL_MAX;
+}
+
+void RestoreNativeSupportSpellMetadata()
+{
+    for (auto const& [spellId, backup] : g_nativeSupportBackups)
+    {
+        SpellInfo* spellInfo = const_cast<SpellInfo*>(sSpellMgr->GetSpellInfo(spellId));
+        if (!spellInfo)
+            continue;
+
+        for (uint8 effectIndex = 0; effectIndex < 3; ++effectIndex)
+        {
+            NativeEffectBackup const& effectBackup = backup[effectIndex];
+            if (!effectBackup.active)
+                continue;
+
+            spellInfo->Effects[effectIndex].DieSides = effectBackup.dieSides;
+            spellInfo->Effects[effectIndex].RealPointsPerLevel = effectBackup.realPointsPerLevel;
+        }
+    }
+
+    g_nativeSupportBackups.clear();
+}
+
+bool NeutralizeNativeSupportSpellMetadata()
+{
+    for (auto const& [spellId, levels] : g_customScaling)
+    {
+        if (IsCustomSpellId(spellId))
+            continue;
+
+        SpellInfo* spellInfo = const_cast<SpellInfo*>(sSpellMgr->GetSpellInfo(spellId));
+        if (!spellInfo)
+        {
+            LOG_ERROR(
+                "module.SpellDraft",
+                "Aventureros de Azeroth: native owner-scaled support spell {} is missing from SpellMgr.",
+                spellId
+            );
+            return false;
+        }
+
+        NativeSpellBackup backup{};
+        bool hasActiveEffect = false;
+        for (uint8 effectIndex = 0; effectIndex < 3; ++effectIndex)
+        {
+            bool active = false;
+            for (uint32 level = 1; level < levels.size(); ++level)
+            {
+                if (levels[level].present && levels[level].effects[effectIndex].active)
+                {
+                    active = true;
+                    break;
+                }
+            }
+
+            if (!active)
+                continue;
+
+            hasActiveEffect = true;
+            backup[effectIndex].active = true;
+            backup[effectIndex].dieSides = spellInfo->Effects[effectIndex].DieSides;
+            backup[effectIndex].realPointsPerLevel = spellInfo->Effects[effectIndex].RealPointsPerLevel;
+            spellInfo->Effects[effectIndex].DieSides = 0;
+            spellInfo->Effects[effectIndex].RealPointsPerLevel = 0.0f;
+        }
+
+        if (hasActiveEffect)
+            g_nativeSupportBackups.emplace(spellId, backup);
+    }
+
+    return true;
+}
 
 SpellValueMod EffectSpellValueMod(uint8 effectIndex)
 {
@@ -366,6 +458,7 @@ void ConfigureCustomSpellScaling(bool enabled)
     // resolver while the table is being replaced or if parsing fails.
     SetAventurerosCustomSpellCastTimeResolver(nullptr);
     g_customScalingEnabled = false;
+    RestoreNativeSupportSpellMetadata();
     g_customScaling.clear();
 
     if (!enabled)
@@ -380,6 +473,13 @@ void ConfigureCustomSpellScaling(bool enabled)
     std::string const path = ScalingFilePath();
     if (!LoadScalingFile(path))
         return;
+
+    if (!NeutralizeNativeSupportSpellMetadata())
+    {
+        RestoreNativeSupportSpellMetadata();
+        g_customScaling.clear();
+        return;
+    }
 
     g_customScalingEnabled = true;
     SetAventurerosCustomSpellCastTimeResolver(ResolveProfiledCastTime);
