@@ -1,0 +1,67 @@
+diff --git a/modules/mod-spelldraft/lua/SpellDraft/draft.lua b/modules/mod-spelldraft/lua/SpellDraft/draft.lua
+--- a/modules/mod-spelldraft/lua/SpellDraft/draft.lua
++++ b/modules/mod-spelldraft/lua/SpellDraft/draft.lua
+@@ -386,6 +386,19 @@ local function DraftsRemaining(player)
+     return math.max(0, ExpectedDrafts(player) - state.count)
+ end
+ 
++local function CanCarryProtectionToFutureDraft(player)
++    local state = LoadDraftedState(player:GetGUIDLow(), false)
++
++    -- Protection may cross a level gap. It is disabled only when the current
++    -- choice would reach the configured lifetime draft cap.
++    if MAX_DRAFTED_SPELLS <= 0 then
++        return true
++    end
++
++    return (state.count + 1) < MAX_DRAFTED_SPELLS
++end
++
+ local function LoadPendingOffer(guid, force)
+     if pendingOfferLoaded[guid] and not force then
+         return pendingOfferCache[guid]
+@@ -711,14 +724,9 @@ local function EnsureAndSendOffer(player)
+     SendCompatibilityState(player)
+ 
+     if DraftsRemaining(player) <= 0 then
+-        local resources = GrantProgressionResources(player)
+-        if resources.protectedSpellId > 0 then
+-            resources.protections = resources.protections + 1
+-            resources.protectedSpellId = 0
+-            SaveDraftResources(player:GetGUIDLow(), resources)
+-            SendCompatibilityState(player)
+-        end
++        -- A protection may intentionally wait across level gaps until the next
++        -- draft milestone. Do not refund or clear it at the current level.
+         ClearPendingOffer(player:GetGUIDLow())
+         player:SendAddonMessage("SpellChoiceClose", "", 0, player)
+         return
+@@ -918,13 +926,8 @@ local function AcceptPick(player, spellId)
+     if DraftsRemaining(player) > 0 then
+         EnsureAndSendOffer(player)
+     else
+-        resources = GrantProgressionResources(player)
+-        if resources.protectedSpellId > 0 then
+-            resources.protections = resources.protections + 1
+-            resources.protectedSpellId = 0
+-            SaveDraftResources(guid, resources)
+-            SendCompatibilityState(player)
+-        end
++        -- Keep a held protection until a future level unlocks the next draft.
++        -- HandleProtect prevents doing this on the true final career choice.
+         player:SendAddonMessage("SpellChoiceClose", "", 0, player)
+     end
+ end
+@@ -1058,10 +1061,10 @@ local function HandleProtect(player, spellId)
+         return
+     end
+ 
+-    -- Protection is meaningful only when another draft remains after the
+-    -- current pick. Prevent wasting the final protection on the last choice.
+-    if DraftsRemaining(player) <= 1 then
++    -- Protection may wait through level gaps (for example level 5 -> 10).
++    -- Reject it only when this really is the last configured career draft.
++    if not CanCarryProtectionToFutureDraft(player) then
+         player:SendAddonMessage("SpellChoiceProtectDenied", "last", 0, player)
+         return
+     end
