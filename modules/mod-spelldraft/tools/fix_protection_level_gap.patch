@@ -1,7 +1,7 @@
 diff --git a/modules/mod-spelldraft/lua/SpellDraft/draft.lua b/modules/mod-spelldraft/lua/SpellDraft/draft.lua
 --- a/modules/mod-spelldraft/lua/SpellDraft/draft.lua
 +++ b/modules/mod-spelldraft/lua/SpellDraft/draft.lua
-@@ -386,6 +386,19 @@ local function DraftsRemaining(player)
+@@ -392,4 +392,16 @@
      return math.max(0, ExpectedDrafts(player) - state.count)
  end
  
@@ -18,11 +18,7 @@ diff --git a/modules/mod-spelldraft/lua/SpellDraft/draft.lua b/modules/mod-spell
 +end
 +
  local function LoadPendingOffer(guid, force)
-     if pendingOfferLoaded[guid] and not force then
-         return pendingOfferCache[guid]
-@@ -711,14 +724,9 @@ local function EnsureAndSendOffer(player)
-     SendCompatibilityState(player)
- 
+@@ -716,11 +716,6 @@
      if DraftsRemaining(player) <= 0 then
 -        local resources = GrantProgressionResources(player)
 -        if resources.protectedSpellId > 0 then
@@ -36,22 +32,18 @@ diff --git a/modules/mod-spelldraft/lua/SpellDraft/draft.lua b/modules/mod-spell
          ClearPendingOffer(player:GetGUIDLow())
          player:SendAddonMessage("SpellChoiceClose", "", 0, player)
          return
-@@ -891,10 +899,13 @@ local function AcceptPick(player, spellId)
- 
+@@ -883,7 +883,8 @@
      local resources = GrantProgressionResources(player)
      if resources.protectedSpellId == spellId then
 -        -- Picking the protected card itself consumes the protection normally;
 -        -- there is nothing left to carry into the next offer.
-+        -- If the player protects a card and then picks that same card from the
-+        -- current hand, the hold was never used to carry it forward. Refund it.
++        -- The player picked the card before the protection ever carried it to
++        -- another draft, so the protection was not actually spent.
 +        resources.protections = resources.protections + 1
          resources.protectedSpellId = 0
          SaveDraftResources(guid, resources)
-+        SendCompatibilityState(player)
      end
- 
-     local draftIndex = state.count + 1
-@@ -918,13 +929,8 @@ local function AcceptPick(player, spellId)
+@@ -925,12 +925,7 @@
      if DraftsRemaining(player) > 0 then
          EnsureAndSendOffer(player)
      else
@@ -66,11 +58,7 @@ diff --git a/modules/mod-spelldraft/lua/SpellDraft/draft.lua b/modules/mod-spell
 +        -- HandleProtect prevents doing this on the true final career choice.
          player:SendAddonMessage("SpellChoiceClose", "", 0, player)
      end
- end
-@@ -1058,10 +1064,10 @@ local function HandleProtect(player, spellId)
-         return
-     end
- 
+@@ -1056,6 +1056,6 @@
 -    -- Protection is meaningful only when another draft remains after the
 -    -- current pick. Prevent wasting the final protection on the last choice.
 -    if DraftsRemaining(player) <= 1 then
