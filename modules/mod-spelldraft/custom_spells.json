@@ -9,11 +9,14 @@
   "selection": {
     "mode": "current_spelldraft_roots",
     "max_first_rank_level": 20,
+    "force_include_roots": [
+      6143
+    ],
     "exclude_classes": [
       "DEATHKNIGHT"
     ],
     "include_talents": false,
-    "description": "Normalize every currently draftable non-talent class ability whose first rank is learned at level 20 or earlier. The native rank family is kept as profile/anchor source data and is replaced by one deterministic custom card using custom_id = 200000 + native_root."
+    "description": "Normalize every currently draftable non-talent class ability whose first rank is learned at level 20 or earlier, plus explicitly reviewed force_include_roots needed by audited package cards. The native rank family is kept as profile/anchor source data and is replaced by one deterministic custom card using custom_id = 200000 + native_root."
   },
   "pinned": [
     {
