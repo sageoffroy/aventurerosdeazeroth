@@ -22,6 +22,7 @@ import argparse
 import json
 import math
 import re
+import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -34,6 +35,7 @@ DEFAULT_EXTENSIONS = MODULE / "project_spell_extensions.json"
 DEFAULT_REGISTRY = MODULE / "custom_spells.json"
 ALIAS_FILENAME = "AventurerosCustomSpellData.lua"
 SPELL_ID = 0
+CAST_TIME_INDEX = 28
 SPELL_LEVEL = 39
 SPELL_EFFECT_SCHOOL_DAMAGE = 2
 CATALOG_LINE_RE = re.compile(
@@ -128,6 +130,13 @@ def validate_extensions(data: dict[str, Any]) -> tuple[list[dict[str, Any]], lis
 def dbc_rows(path: Path) -> dict[int, bytearray]:
     _fields, _record_size, records, _strings, _trailing = read_dbc(path)
     return {u32(row, SPELL_ID): row for row in records}
+
+
+def cast_time_map(path: Path) -> dict[int, int]:
+    fields, record_size, records, _strings, _trailing = read_dbc(path)
+    if fields < 2 or record_size != fields * 4:
+        raise ExtensionError(f"{path}: unexpected SpellCastTimes.dbc layout")
+    return {u32(row, 0): max(0, struct.unpack_from("<i", row, 4)[0]) for row in records}
 
 
 def lua_quote(value: str) -> str:
@@ -282,6 +291,7 @@ def derive_support_rows(
     registry: dict[str, Any],
     spell_rows: dict[int, bytearray],
     runtime: dict[int, dict[int, RuntimeRow]],
+    cast_times: dict[int, int],
 ) -> dict[int, dict[int, RuntimeRow]]:
     max_level = int(registry.get("runtime_max_level", 0))
     offset = int(registry.get("custom_id_offset", 0))
@@ -305,6 +315,7 @@ def derive_support_rows(
             raise ExtensionError(f"{label}: support/source spell missing from Spell.dbc")
 
         support_effect = school_damage_index(support_dbc, spell_id)
+        support_cast_ms = cast_times.get(u32(support_dbc, CAST_TIME_INDEX), 0)
         source_effect = school_damage_index(source_dbc, source_root)
         source_custom_id = offset + source_root
         source_levels = runtime.get(source_custom_id)
@@ -347,7 +358,7 @@ def derive_support_rows(
             levels[level] = RuntimeRow(
                 spell_id=spell_id,
                 level=level,
-                cast_ms=0,
+                cast_ms=support_cast_ms,
                 duration_ms=0,
                 effects=(effects[0], effects[1], effects[2]),
             )
@@ -378,13 +389,14 @@ def apply_support_scaling(
     supports: list[dict[str, Any]],
     registry: dict[str, Any],
     spell_rows: dict[int, bytearray],
+    cast_times: dict[int, int],
 ) -> int:
     header, runtime = parse_runtime(scaling_path)
     support_ids = {int(spec["spell_id"]) for spec in supports}
     for spell_id in support_ids:
         runtime.pop(spell_id, None)
 
-    generated = derive_support_rows(supports, registry, spell_rows, runtime)
+    generated = derive_support_rows(supports, registry, spell_rows, runtime, cast_times)
     runtime.update(generated)
 
     lines = [
@@ -478,7 +490,9 @@ def main() -> None:
         extensions = load_json(args.extensions.expanduser().resolve(), "project spell extensions")
         cards, supports = validate_extensions(extensions)
         registry = load_json(args.registry.expanduser().resolve(), "custom spell registry")
-        spell_rows = dbc_rows(args.dbc_dir.expanduser().resolve() / "Spell.dbc")
+        dbc_dir = args.dbc_dir.expanduser().resolve()
+        spell_rows = dbc_rows(dbc_dir / "Spell.dbc")
+        cast_times = cast_time_map(dbc_dir / "SpellCastTimes.dbc")
 
         print("Project spell extensions:")
         catalog_changes = apply_catalog_cards(
@@ -487,7 +501,7 @@ def main() -> None:
         print(f"  project cards: {len(cards)} ({catalog_changes} catalog rows changed)")
 
         support_rows = apply_support_scaling(
-            args.scaling.expanduser().resolve(), supports, registry, spell_rows
+            args.scaling.expanduser().resolve(), supports, registry, spell_rows, cast_times
         )
         print(f"  owner-scaled support rows: {support_rows}")
 
