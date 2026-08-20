@@ -5,10 +5,11 @@
       "card_id": 190001,
       "source_spell_id": 10059,
       "name": "Maestro de Portales",
-      "description": "Aprendes todos los hechizos de Portal. No requieren componentes.",
+      "description": "Aprendes todos los hechizos de Portal disponibles para tu facción. No requieren componentes.",
       "rarity": 3,
       "class_set": 3,
       "min_level": 1,
+      "passive_marker": true,
       "remove_item_requirements": true,
       "exclude_from_pool": [
         3561,
@@ -26,20 +27,26 @@
         53140
       ],
       "teaches": [
-        10059,
-        11416,
-        11417,
-        11418,
-        11419,
-        11420,
-        32266,
-        32267,
-        33691,
-        35717,
-        49360,
-        49361,
         53142
-      ]
+      ],
+      "teaches_by_team": {
+        "0": [
+          10059,
+          11416,
+          11419,
+          32266,
+          33691,
+          49360
+        ],
+        "1": [
+          11417,
+          11418,
+          11420,
+          32267,
+          35717,
+          49361
+        ]
+      }
     }
   ]
 }
