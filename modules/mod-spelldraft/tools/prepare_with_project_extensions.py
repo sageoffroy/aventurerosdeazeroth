@@ -38,6 +38,12 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
 
+    print(
+        "NOTE: prepare_first_run.py still contains two legacy readiness labels "
+        "hardcoded to 1-60. On this experimental 1-80 branch those lines may "
+        "print FALTA; the project-extension validator run at the end is authoritative."
+    )
+
     prepare_args = [
         sys.executable,
         str(TOOLS / "prepare_first_run.py"),
