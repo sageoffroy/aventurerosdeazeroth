@@ -61,11 +61,11 @@ Diseño decidido:
 
 Pruebas realizadas:
 
-- Primera prueba en juego: el comportamiento grupal funcionó, pero el aura duró **30 minutos**.
+- Primera prueba en juego: el aura duró **30 minutos**.
 - Causa: `CustomSpellScaling.cpp` reaplicaba al casteo la duración de `custom_spell_scaling.tsv`, que todavía conservaba los 30 minutos originales de la familia de Intelecto Arcano. Modificar sólo `Spell.dbc` no alcanzaba.
 - Corrección aplicada: la mutación revisada fija explícitamente `3600000 ms` en la columna de duración del scaling runtime de `201459`, manteniendo el escalado numérico normal intacto.
-
-Falta repetir la prueba en juego y confirmar **1 hora** antes de marcarlo APROBADO.
+- Segunda prueba en juego: **1 hora confirmada** sobre el propio personaje.
+- La propagación a **grupo/banda** queda pendiente de una prueba con otro jugador; técnicamente el comportamiento estructural se copia de `23028 Luminosidad Arcana`.
 
 Prueba directa:
 
