@@ -75,6 +75,16 @@ def main() -> None:
         str(resolved),
     )
 
+    # Package cards clone a native spell only for icon/presentation. Strip any
+    # inherited localized Rank 1 / Rango 1 subtext so the virtual card itself is
+    # visibly rankless, just like normalized custom abilities.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "finalize_package_cards.py"),
+        "--dbc-dir",
+        str(dbc_src),
+    )
+
     # Reviewed special cases mutate the already-normalized runtime card without
     # creating a second scaling path. Numeric amounts stay owned by the normalizer.
     # If the reviewed design changes duration, the same stage patches the duration
@@ -148,6 +158,7 @@ def main() -> None:
     print("Los Portales no requieren componentes; Teleports/Portals individuales quedan fuera del pool.")
     print("Teleport: Moonglade usa el ID nativo y solo es elegible para Elfos de la Noche.")
     print("Arcane Intellect conserva identidad/escalado, usa comportamiento grupal y fuerza duracion runtime de 1 hora.")
+    print("Las cartas-paquete son marcadores sin rango visible (sin Rank 1 / Rango 1 heredado).")
     print("Audit pool: si audit_pool.json esta habilitado, solo ofrece su whitelist.")
 
 
