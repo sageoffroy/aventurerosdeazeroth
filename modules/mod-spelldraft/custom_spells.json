@@ -5,7 +5,7 @@
     299999
   ],
   "custom_id_offset": 200000,
-  "runtime_max_level": 60,
+  "runtime_max_level": 80,
   "selection": {
     "mode": "current_spelldraft_roots",
     "max_first_rank_level": 20,
