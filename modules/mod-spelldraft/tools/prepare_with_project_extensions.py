@@ -4,7 +4,7 @@
 This wrapper intentionally delegates the established DBC/catalog/client pipeline
 to prepare_first_run.py. Only after that pipeline has generated and validated its
 normal assets does it enrich the same runtime catalog/scaling TSV/addon metadata
-with project_spell_extensions.json.
+with project_spell_extensions.json and validate those extensions separately.
 """
 
 from __future__ import annotations
@@ -68,6 +68,8 @@ def main() -> None:
         else data_dir / "dbc"
     )
     client = args.client_dir.expanduser().resolve()
+    catalog = install / "bin" / "lua_scripts" / "SpellDraft" / "catalog.lua"
+    scaling = data_dir / "spelldraft" / "custom_spell_scaling.tsv"
 
     run(
         sys.executable,
@@ -75,15 +77,28 @@ def main() -> None:
         "--dbc-dir",
         str(dbc_dir),
         "--catalog",
-        str(install / "bin" / "lua_scripts" / "SpellDraft" / "catalog.lua"),
+        str(catalog),
         "--scaling",
-        str(data_dir / "spelldraft" / "custom_spell_scaling.tsv"),
+        str(scaling),
+        "--client-dir",
+        str(client),
+    )
+
+    run(
+        sys.executable,
+        str(TOOLS / "validate_project_spell_extensions.py"),
+        "--dbc-dir",
+        str(dbc_dir),
+        "--catalog",
+        str(catalog),
+        "--scaling",
+        str(scaling),
         "--client-dir",
         str(client),
     )
 
     print()
-    print("Project spell extensions applied on top of the canonical prepared assets.")
+    print("Project spell extensions applied and validated on the canonical prepared assets.")
     print("Mirror Image is now a native Epic draft card available from level 1.")
     print("Its Frostbolt/Fire Blast support spells scale from the owning player's level.")
     print("No undeclared pet/guardian spell is modified by the extension layer.")
