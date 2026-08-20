@@ -1,16 +1,19 @@
 {
   "version": 1,
   "enabled": true,
-  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. Only these cards are offered while enabled.",
+  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. Only real draft-card IDs in spells[] are offered while enabled. reviewed_test_ids records already-tested runtime spell IDs that are not standalone cards.",
   "spells": [
     { "id": 190001, "name": "Maestro de Portales", "status": "reviewing" },
     { "id": 200116, "name": "Frostbolt", "status": "approved" },
     { "id": 200133, "name": "Fireball", "status": "approved" },
-    { "id": 201002, "status": "approved" },
-    { "id": 201003, "status": "approved" },
-    { "id": 201005, "status": "approved" },
-    { "id": 201026, "status": "approved" },
-    { "id": 201042, "status": "approved" },
-    { "id": 201129, "status": "approved" }
+    { "id": 200635, "name": "Holy Light", "status": "approved", "reviewed_via": [201026, 201042] },
+    { "id": 201002, "name": "Eyes of the Beast", "status": "approved" }
+  ],
+  "reviewed_test_ids": [
+    { "id": 201003, "status": "reviewed_non_card" },
+    { "id": 201005, "status": "reviewed_non_card" },
+    { "id": 201026, "status": "reviewed_rank", "card_id": 200635 },
+    { "id": 201042, "status": "reviewed_rank", "card_id": 200635 },
+    { "id": 201129, "status": "reviewed_non_card" }
   ]
 }
