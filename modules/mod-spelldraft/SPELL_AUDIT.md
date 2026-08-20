@@ -73,6 +73,23 @@ Prueba directa:
 .learn 201459
 ```
 
+### 190002 — Resguardo Elemental
+
+**Estado:** REVISANDO
+
+Decisión de diseño:
+
+- Una sola carta reemplaza a **Resguardo de Fuego** y **Resguardo de Escarcha** como elecciones independientes del draft.
+- Al elegirla se aprenden las dos habilidades activas:
+  - `200543` — Resguardo de Fuego normalizado.
+  - `6143` — Resguardo de Escarcha.
+- La carta `190002 Resguardo Elemental` queda como marcador pasivo en el libro de hechizos; las dos habilidades enseñadas son las que se usan activamente.
+- `543/200543 Fire Ward` y `6143 Frost Ward` quedan fuera del pool como cartas independientes.
+- Usa como icono de referencia el de `Fire Ward (543)`.
+- Rareza configurada temporalmente como **Uncommon**; se revisará en la pasada final de balance.
+
+Falta validar en juego que al obtener la carta se aprendan ambos resguardos y funcionen correctamente.
+
 ---
 
 ## PENDIENTES DE AUDITORÍA
@@ -82,14 +99,11 @@ Por ahora **no se consideran aprobados** aunque estén presentes en la whitelist
 - `200116` — Frostbolt
 - `200133` — Fireball
 - `200168` — Frost Armor
-- `200543` — Fire Ward
-- `6143` — Frost Ward
 - `200604` — Dampen Magic
 - `201008` — Amplify Magic
 
 ### Bloques de diseño pendientes
 
-- **Fire Ward + Frost Ward**: decidir si quedan separados o se comprimen en una carta/paquete.
 - **Amplify Magic + Dampen Magic**: decidir si quedan separados o se comprimen.
 - **Armaduras** (`Frost Armor`, `Ice Armor`, `Mage Armor`, `Molten Armor`): conservar como elecciones de build salvo evidencia en contrario.
 - Duplicados de `Molten Armor` requieren inspección técnica antes de decidir.
