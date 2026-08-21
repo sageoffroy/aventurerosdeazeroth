@@ -1,139 +1,50 @@
--- Aventureros de Azeroth - elecciones de talento por vida.
---
--- Este motor es independiente de SpellDraft. Solo usa su contrato publico de
--- persistencia (spelldraft_drafted_spells) para dar prioridad a las habilidades
--- normales cuando ambas progresiones coinciden en un mismo nivel.
---
--- La integracion de protocolo se hace desde agent/integration-testing con un
--- unico punto de delegacion en el handler SC:* de SpellDraft. Este archivo NO
--- registra eventos de chat para evitar que dos motores compitan por SC:<id>.
+-- Aventureros de Azeroth - per-life talent draft.
+-- SpellDraft owns normal abilities. This module only reads its persisted pick
+-- count so abilities always have priority when both systems unlock together.
 
 AventurerosTalentDraft = AventurerosTalentDraft or {}
 local M = AventurerosTalentDraft
-
-if M.__loaded then
-    return
-end
+if M.__loaded then return end
 M.__loaded = true
 
 local CLASS_ADVENTURER = 10
-local MAX_PERSISTED_OFFER_SIZE = 5
+local MAX_OFFER = 5
 
-local function ConfigBoolean(name, default)
+local function cfgBool(name, default)
     local raw = GetConfigValue(name)
-    if raw == nil or raw == "" then
-        return default
-    end
-    if raw == true or raw == 1 or raw == "1" then
-        return true
-    end
-    if raw == false or raw == 0 or raw == "0" then
-        return false
-    end
-
-    local value = string.lower(tostring(raw))
-    if value == "true" or value == "yes" or value == "on" then
-        return true
-    end
-    if value == "false" or value == "no" or value == "off" then
-        return false
-    end
+    if raw == nil or raw == "" then return default end
+    if raw == true or raw == 1 or raw == "1" then return true end
+    if raw == false or raw == 0 or raw == "0" then return false end
+    local v = string.lower(tostring(raw))
+    if v == "true" or v == "yes" or v == "on" then return true end
+    if v == "false" or v == "no" or v == "off" then return false end
     return default
 end
 
-local function ConfigNumber(name, default, minimum, maximum, integer)
-    local value = tonumber(GetConfigValue(name))
-    if value == nil then
-        value = default
-    end
-    if integer then
-        value = math.floor(value)
-    end
-    if minimum ~= nil then
-        value = math.max(minimum, value)
-    end
-    if maximum ~= nil then
-        value = math.min(maximum, value)
-    end
-    return value
+local function cfgNum(name, default, lo, hi)
+    local v = math.floor(tonumber(GetConfigValue(name)) or default)
+    if lo then v = math.max(lo, v) end
+    if hi then v = math.min(hi, v) end
+    return v
 end
 
-local ENABLED = ConfigBoolean(
-    "AventurerosProgression.Talents.Enable",
-    true
-)
-local FIRST_TALENT_LEVEL = ConfigNumber(
-    "AventurerosProgression.Talents.FirstLevel",
-    10,
-    1,
-    80,
-    true
-)
-local LEVELS_PER_TALENT = ConfigNumber(
-    "AventurerosProgression.Talents.LevelsPerPick",
-    2,
-    1,
-    80,
-    true
-)
-local MAX_TALENT_PICKS = ConfigNumber(
-    "AventurerosProgression.Talents.MaxPicks",
-    36,
-    0,
-    200,
-    true
-)
-local TALENT_OFFER_SIZE = ConfigNumber(
-    "AventurerosProgression.Talents.OfferSize",
-    3,
-    1,
-    MAX_PERSISTED_OFFER_SIZE,
-    true
-)
-local WAIT_RETRY_MS = ConfigNumber(
-    "AventurerosProgression.Talents.WaitRetryMs",
-    1500,
-    250,
-    10000,
-    true
-)
+local ENABLED = cfgBool("AventurerosProgression.Talents.Enable", true)
+local FIRST_LEVEL = cfgNum("AventurerosProgression.Talents.FirstLevel", 10, 1, 80)
+local LEVELS_PER_PICK = cfgNum("AventurerosProgression.Talents.LevelsPerPick", 2, 1, 80)
+local MAX_PICKS = cfgNum("AventurerosProgression.Talents.MaxPicks", 36, 0, 200)
+local OFFER_SIZE = cfgNum("AventurerosProgression.Talents.OfferSize", 3, 1, MAX_OFFER)
+local RETRY_MS = cfgNum("AventurerosProgression.Talents.WaitRetryMs", 1500, 250, 10000)
 
--- Lectura de la progresion normal. No escribimos archivos ni estado interno de
--- SpellDraft; replicamos solamente la formula publica de cuantos picks deberia
--- tener el personaje a su nivel actual.
-local STARTING_DRAFTS = ConfigNumber("SpellDraft.StartingDrafts", 3, 0, 100, true)
-local FIRST_ADDITIONAL_DRAFT_LEVEL = ConfigNumber(
-    "SpellDraft.FirstAdditionalDraftLevel",
-    5,
-    2,
-    80,
-    true
-)
-local LEVELS_PER_DRAFT = ConfigNumber(
-    "SpellDraft.LevelsPerDraft",
-    5,
-    1,
-    80,
-    true
-)
-local DRAFTS_PER_MILESTONE = ConfigNumber(
-    "SpellDraft.DraftsPerMilestone",
-    1,
-    1,
-    20,
-    true
-)
-local MAX_DRAFTED_SPELLS = ConfigNumber(
-    "SpellDraft.MaxDraftedSpells",
-    15,
-    0,
-    500,
-    true
-)
+-- Public SpellDraft progression contract. We read config + the existing table;
+-- no SpellDraft source file or runtime local is imported here.
+local SD_START = cfgNum("SpellDraft.StartingDrafts", 3, 0, 100)
+local SD_FIRST = cfgNum("SpellDraft.FirstAdditionalDraftLevel", 5, 2, 80)
+local SD_EVERY = cfgNum("SpellDraft.LevelsPerDraft", 5, 1, 80)
+local SD_PER_MILESTONE = cfgNum("SpellDraft.DraftsPerMilestone", 1, 1, 20)
+local SD_MAX = cfgNum("SpellDraft.MaxDraftedSpells", 15, 0, 500)
 
 local scriptPath = debug.getinfo(1).source:sub(2)
 local parentPath = scriptPath:match("(.+[/\\])") or ""
-
 if not AventurerosProgression or not AventurerosProgression.IsTalentUnlocked then
     dofile(parentPath .. "account.lua")
 end
@@ -141,600 +52,299 @@ if not AventurerosTalentCatalog then
     dofile(parentPath .. "talent_catalog.lua")
 end
 
-local TALENT_FAMILIES = AventurerosTalentCatalog or {}
-local FAMILY_BY_ID = {}
-local SPELL_TO_RANK = {}
-
-for _, family in ipairs(TALENT_FAMILIES) do
-    FAMILY_BY_ID[family.id] = family
+local FAMILIES = AventurerosTalentCatalog or {}
+local BY_ID, SPELL_RANK = {}, {}
+for _, family in ipairs(FAMILIES) do
+    BY_ID[family.id] = family
     for rank, spellId in ipairs(family.ranks or {}) do
-        SPELL_TO_RANK[spellId] = {
-            family = family,
-            rank = rank,
-        }
+        SPELL_RANK[spellId] = { family = family, rank = rank }
     end
 end
 
-local characterStateCache = {}
-local pendingOfferCache = {}
-local pendingOfferLoaded = {}
-local waitGeneration = {}
+local stateCache, offerCache, offerLoaded, generation = {}, {}, {}, {}
 
-local function IsBotPlayer(player)
+local function isBot(player)
     return player and player.IsBot ~= nil and player:IsBot()
 end
 
-local function IsAdventurer(player)
-    return ENABLE
-        and player
-        and player:GetClass() == CLASS_ADVENTURER
-        and not IsBotPlayer(player)
+local function isAdventurer(player)
+    return ENABLED and player and player:GetClass() == CLASS_ADVENTURER and not isBot(player)
 end
 
-local function ExpectedNormalDrafts(player)
+local function expectedNormal(player)
     local level = math.max(1, player:GetLevel() or 1)
-    local expected = STARTING_DRAFTS
-
-    if level >= FIRST_ADDITIONAL_DRAFT_LEVEL then
-        local milestones = math.floor(
-            (level - FIRST_ADDITIONAL_DRAFT_LEVEL) / LEVELS_PER_DRAFT
-        ) + 1
-        expected = expected + milestones * DRAFTS_PER_MILESTONE
+    local n = SD_START
+    if level >= SD_FIRST then
+        n = n + (math.floor((level - SD_FIRST) / SD_EVERY) + 1) * SD_PER_MILESTONE
     end
-
-    if MAX_DRAFTED_SPELLS > 0 then
-        expected = math.min(expected, MAX_DRAFTED_SPELLS)
-    end
-    return expected
+    if SD_MAX > 0 then n = math.min(n, SD_MAX) end
+    return n
 end
 
-local function NormalDraftCount(player)
-    local query = CharDBQuery(
+local function normalCount(player)
+    local q = CharDBQuery(
         "SELECT COUNT(*) FROM spelldraft_drafted_spells WHERE player_guid = "
         .. player:GetGUIDLow()
     )
-    if not query then
-        return 0
-    end
-    return query:GetUInt32(0)
+    return q and q:GetUInt32(0) or 0
 end
 
-local function NormalDraftsRemaining(player)
-    return math.max(0, ExpectedNormalDrafts(player) - NormalDraftCount(player))
+local function normalRemaining(player)
+    return math.max(0, expectedNormal(player) - normalCount(player))
 end
 
-local function ExpectedTalentPicks(player)
-    if not IsAdventurer(player) then
-        return 0
-    end
-
+local function expectedPicks(player)
+    if not isAdventurer(player) then return 0 end
     local level = math.max(1, player:GetLevel() or 1)
-    if level < FIRST_TALENT_LEVEL then
-        return 0
-    end
-
-    local expected = math.floor(
-        (level - FIRST_TALENT_LEVEL) / LEVELS_PER_TALENT
-    ) + 1
-
-    if MAX_TALENT_PICKS > 0 then
-        expected = math.min(expected, MAX_TALENT_PICKS)
-    end
-    return expected
+    if level < FIRST_LEVEL then return 0 end
+    local n = math.floor((level - FIRST_LEVEL) / LEVELS_PER_PICK) + 1
+    if MAX_PICKS > 0 then n = math.min(n, MAX_PICKS) end
+    return n
 end
 
-local function LoadCharacterState(player, force)
+local function loadState(player, force)
     local guid = player:GetGUIDLow()
-    if characterStateCache[guid] and not force then
-        return characterStateCache[guid]
-    end
-
-    local state = {
-        ranks = {},
-        count = 0,
-    }
-
-    local query = CharDBQuery(
+    if stateCache[guid] and not force then return stateCache[guid] end
+    local state = { ranks = {}, count = 0 }
+    local q = CharDBQuery(
         "SELECT talent_id, talent_rank FROM aventureros_character_talents "
         .. "WHERE player_guid = " .. guid .. " ORDER BY talent_index"
     )
-
-    if query then
+    if q then
         repeat
-            local talentId = query:GetString(0)
-            local rank = query:GetUInt32(1)
-            if talentId and talentId ~= "" and rank > 0 then
-                state.ranks[talentId] = math.max(
-                    state.ranks[talentId] or 0,
-                    rank
-                )
+            local id, rank = q:GetString(0), q:GetUInt32(1)
+            if id and id ~= "" and rank > 0 then
+                state.ranks[id] = math.max(state.ranks[id] or 0, rank)
                 state.count = state.count + 1
             end
-        until not query:NextRow()
+        until not q:NextRow()
     end
-
-    characterStateCache[guid] = state
+    stateCache[guid] = state
     return state
 end
 
-local function PicksRemaining(player)
-    local state = LoadCharacterState(player, false)
-    return math.max(0, ExpectedTalentPicks(player) - state.count)
+local function picksRemaining(player)
+    return math.max(0, expectedPicks(player) - loadState(player, false).count)
 end
 
-local function ClearPendingOffer(guid)
-    pendingOfferCache[guid] = nil
-    pendingOfferLoaded[guid] = true
-    CharDBExecute(
-        "DELETE FROM aventureros_pending_talent_offer WHERE player_guid = " .. guid
-    )
+local function clearOffer(guid)
+    offerCache[guid], offerLoaded[guid] = nil, true
+    CharDBExecute("DELETE FROM aventureros_pending_talent_offer WHERE player_guid = " .. guid)
 end
 
-local function LoadPendingOffer(player, force)
+local function loadOffer(player, force)
     local guid = player:GetGUIDLow()
-    if pendingOfferLoaded[guid] and not force then
-        return pendingOfferCache[guid]
-    end
-
-    pendingOfferLoaded[guid] = true
-    pendingOfferCache[guid] = nil
-
-    local query = CharDBQuery(
+    if offerLoaded[guid] and not force then return offerCache[guid] end
+    offerLoaded[guid], offerCache[guid] = true, nil
+    local q = CharDBQuery(
         "SELECT offer_1, offer_2, offer_3, offer_4, offer_5, offer_size "
         .. "FROM aventureros_pending_talent_offer WHERE player_guid = " .. guid
     )
-    if not query then
-        return nil
-    end
-
-    if query:GetUInt32(5) >= TALENT_OFFER_SIZE then
-        ClearPendingOffer(guid)
-        return nil
-    end
-
+    if not q then return nil end
+    if q:GetUInt32(5) ~= OFFER_SIZE then clearOffer(guid); return nil end
     local offer = {}
-    for column = 0, MAX_PERSISTED_OFFER_SIZE - 1 do
-        local spellId = query:GetUInt32(column)
-        if spellId and spellId > 0 then
-            table.insert(offer, spellId)
-        end
+    for col = 0, MAX_OFFER - 1 do
+        local id = q:GetUInt32(col)
+        if id and id > 0 then table.insert(offer, id) end
     end
-
-    if #offer == 0 then
-        ClearPendingOffer(guid)
-        return nil
-    end
-
-    pendingOfferCache[guid] = offer
+    if #offer == 0 then clearOffer(guid); return nil end
+    offerCache[guid] = offer
     return offer
 end
 
-local function SavePendingOffer(player, offer)
+local function saveOffer(player, offer)
     local guid = player:GetGUIDLow()
-    local values = {0, 0, 0, 0, 0}
-
-    for index, spellId in ipairs(offer) do
-        if index <= MAX_PERSISTED_OFFER_SIZE then
-            values[index] = spellId
-        end
-    end
-
-    pendingOfferCache[guid] = offer
-    pendingOfferLoaded[guid] = true
-
+    local v = {0, 0, 0, 0, 0}
+    for i, id in ipairs(offer) do if i <= MAX_OFFER then v[i] = id end end
+    offerCache[guid], offerLoaded[guid] = offer, true
     CharDBExecute(string.format(
         "INSERT INTO aventureros_pending_talent_offer "
-        .. "(player_guid, offer_1, offer_2, offer_3, offer_4, offer_5, "
-        .. "offer_size, offered_level) "
-        .. "VALUES (%u, %u, %u, %u, %u, %u, %u, %u) "
-        .. "ON DUPLICATE KEY UPDATE offer_1 = VALUES(offer_1), "
-        .. "offer_2 = VALUES(offer_2), offer_3 = VALUES(offer_3), "
-        .. "offer_4 = VALUES(offer_4), offer_5 = VALUES(offer_5), "
-        .. "offer_size = VALUES(offer_size), offered_level = VALUES(offered_level)",
-        guid,
-        values[1],
-        values[2],
-        values[3],
-        values[4],
-        values[5],
-        TALENT_OFFER_SIZE,
-        player:GetLevel() or 1
+        .. "(player_guid,offer_1,offer_2,offer_3,offer_4,offer_5,offer_size,offered_level) "
+        .. "VALUES (%u,%u,%u,%u,%u,%u,%u,%u) ON DUPLICATE KEY UPDATE "
+        .. "offer_1=VALUES(offer_1),offer_2=VALUES(offer_2),offer_3=VALUES(offer_3),"
+        .. "offer_4=VALUES(offer_4),offer_5=VALUES(offer_5),offer_size=VALUES(offer_size),"
+        .. "offered_level=VALUES(offered_level)",
+        guid, v[1], v[2], v[3], v[4], v[5], OFFER_SIZE, player:GetLevel() or 1
     ))
 end
 
-local function BuildCandidates(player)
-    local state = LoadCharacterState(player, false)
-    local candidates = {}
-
-    for _, family in ipairs(TALENT_FAMILIES) do
+local function candidates(player)
+    local state, out = loadState(player, false), {}
+    for _, family in ipairs(FAMILIES) do
         if AventurerosProgression.IsTalentUnlocked(player, family.id) then
-            local nextRank = (state.ranks[family.id] or 0) + 1
-            local spellId = family.ranks and family.ranks[nextRank]
-            if spellId then
-                table.insert(candidates, {
-                    family = family,
-                    rank = nextRank,
-                    spellId = spellId,
-                })
-            end
+            local rank = (state.ranks[family.id] or 0) + 1
+            local spellId = family.ranks and family.ranks[rank]
+            if spellId then table.insert(out, spellId) end
         end
     end
-
-    return candidates
+    return out
 end
 
-local function Shuffle(values)
-    for index = #values, 2, -1 do
-        local other = math.random(index)
-        values[index], values[other] = values[other], values[index]
+local function shuffle(t)
+    for i = #t, 2, -1 do
+        local j = math.random(i)
+        t[i], t[j] = t[j], t[i]
     end
 end
 
-local function GenerateOffer(player)
-    local candidates = BuildCandidates(player)
-    Shuffle(candidates)
-
-    local offer = {}
-    local take = math.min(TALENT_OFFER_SIZE, #candidates)
-    for index = 1, take do
-        table.insert(offer, candidates[index].spellId)
-    end
+local function makeOffer(player)
+    local pool, offer = candidates(player), {}
+    shuffle(pool)
+    for i = 1, math.min(OFFER_SIZE, #pool) do table.insert(offer, pool[i]) end
     return offer
 end
 
-local function OfferContains(offer, spellId)
-    for _, offeredId in ipairs(offer or {}) do
-        if offeredId == spellId then
-            return true
-        end
-    end
+local function contains(offer, spellId)
+    for _, id in ipairs(offer or {}) do if id == spellId then return true end end
     return false
 end
 
-local function OfferIsCurrent(player, offer)
-    if not offer or #offer == 0 then
-        return false
-    end
-
-    local state = LoadCharacterState(player, false)
+local function offerCurrent(player, offer)
+    if not offer or #offer == 0 then return false end
+    local state = loadState(player, false)
     for _, spellId in ipairs(offer) do
-        local mapped = SPELL_TO_RANK[spellId]
-        if not mapped then
+        local mapped = SPELL_RANK[spellId]
+        if not mapped or not AventurerosProgression.IsTalentUnlocked(player, mapped.family.id) then
             return false
         end
-        if not AventurerosProgression.IsTalentUnlocked(
-            player,
-            mapped.family.id
-        ) then
-            return false
-        end
-        local expectedRank = (state.ranks[mapped.family.id] or 0) + 1
-        if mapped.rank ~= expectedRank then
-            return false
-        end
+        if mapped.rank ~= (state.ranks[mapped.family.id] or 0) + 1 then return false end
     end
     return true
 end
 
-local function SendTalentUiState(player)
-    player:SendAddonMessage(
-        "SpellChoiceDrafts",
-        tostring(PicksRemaining(player)),
-        0,
-        player
-    )
+local function sendOffer(player, offer)
+    local zeros = {}
+    for _ = 1, #offer do table.insert(zeros, "0") end
+    player:SendAddonMessage("SpellChoiceDrafts", tostring(picksRemaining(player)), 0, player)
     player:SendAddonMessage("SpellChoiceRerolls", "0", 0, player)
     player:SendAddonMessage("SpellChoiceBansLeft", "0", 0, player)
     player:SendAddonMessage("SpellChoiceProtections", "0", 0, player)
     player:SendAddonMessage("SpellChoiceProtectionEnabled", "0", 0, player)
-end
-
-local function SendOffer(player, offer)
-    local zeroes = {}
-    for _ = 1, #offer do
-        table.insert(zeroes, "0")
-    end
-
-    SendTalentUiState(player)
     player:SendAddonMessage("SpellChoiceIsTalent", "1", 0, player)
     player:SendAddonMessage("SpellChoice", table.concat(offer, ","), 0, player)
-    player:SendAddonMessage(
-        "SpellChoiceRarities",
-        table.concat(zeroes, ","),
-        0,
-        player
-    )
-    player:SendAddonMessage(
-        "SpellChoiceClasses",
-        table.concat(zeroes, ","),
-        0,
-        player
-    )
+    player:SendAddonMessage("SpellChoiceRarities", table.concat(zeros, ","), 0, player)
+    player:SendAddonMessage("SpellChoiceClasses", table.concat(zeros, ","), 0, player)
 end
 
-local function LearnCurrentRank(player, family, rank)
-    if not family or rank <= 0 then
-        return
+local function learnRank(player, family, rank)
+    for i, id in ipairs(family.ranks or {}) do
+        if i ~= rank and player:HasSpell(id) then player:RemoveSpell(id) end
     end
-
-    for index, spellId in ipairs(family.ranks or {}) do
-        if index ~= rank and player:HasSpell(spellId) then
-            player:RemoveSpell(spellId)
-        end
-    end
-
-    local spellId = family.ranks and family.ranks[rank]
-    if spellId and not player:HasSpell(spellId) then
-        player:LearnSpell(spellId)
-    end
+    local id = family.ranks and family.ranks[rank]
+    if id and not player:HasSpell(id) then player:LearnSpell(id) end
 end
 
-local function RestoreTalents(player)
-    local state = LoadCharacterState(player, false)
-    for talentId, rank in pairs(state.ranks) do
-        local family = FAMILY_BY_ID[talentId]
-        if family then
-            LearnCurrentRank(player, family, rank)
-        end
+local function restore(player)
+    local state = loadState(player, false)
+    for id, rank in pairs(state.ranks) do
+        if BY_ID[id] then learnRank(player, BY_ID[id], rank) end
     end
 end
 
 function M.HasPendingOffer(player)
-    if not IsAdventurer(player) then
-        return false
-    end
-    local offer = LoadPendingOffer(player, false)
-    return offer ~= nil and #offer > 0
+    return isAdventurer(player) and loadOffer(player, false) ~= nil
 end
 
 function M.EnsureAndSendOffer(player)
-    if not IsAdventurer(player) then
-        return false
-    end
-
-    if NormalDraftsRemaining(player) > 0 then
-        return false
-    end
-
-    if PicksRemaining(player) <= 0 then
-        ClearPendingOffer(player:GetGUIDLow())
-        return false
-    end
-
-    local offer = LoadPendingOffer(player, false)
-    if not OfferIsCurrent(player, offer) then
-        ClearPendingOffer(player:GetGUIDLow())
-        offer = GenerateOffer(player)
-
+    if not isAdventurer(player) or normalRemaining(player) > 0 then return false end
+    if picksRemaining(player) <= 0 then clearOffer(player:GetGUIDLow()); return false end
+    local offer = loadOffer(player, false)
+    if not offerCurrent(player, offer) then
+        clearOffer(player:GetGUIDLow())
+        offer = makeOffer(player)
         if #offer == 0 then
-            player:SendBroadcastMessage(
-                "[Talentos] Tu pool desbloqueado no tiene másrangos disponibles."
-            )
-            player:SendBroadcastMessage(
-                "[Talentos] Us� !!talentos para ver nuevas familias desbloqueables."
-            )
+            player:SendBroadcastMessage("[Talentos] No quedan rangos disponibles en tu pool.")
             player:SendAddonMessage("SpellChoiceClose", "", 0, player)
             return false
         end
-
-        SavePendingOffer(player, offer)
+        saveOffer(player, offer)
     end
-
-    SendOffer(player, offer)
+    sendOffer(player, offer)
     return true
 end
 
 function M.AcceptPick(player, spellId)
-    if not IsAdventurer(player) then
-        return false
+    if not isAdventurer(player) then return false end
+    local guid, offer = player:GetGUIDLow(), loadOffer(player, false)
+    if not offer or not contains(offer, spellId) then return false end
+    local mapped, state = SPELL_RANK[spellId], loadState(player, false)
+    if not mapped or not AventurerosProgression.IsTalentUnlocked(player, mapped.family.id) then
+        clearOffer(guid); M.EnsureAndSendOffer(player); return true
     end
+    local current = state.ranks[mapped.family.id] or 0
+    if mapped.rank ~= current + 1 then clearOffer(guid); M.EnsureAndSendOffer(player); return true end
 
-    local guid = player:GetGUIDLow()
-    local offer = LoadPendingOffer(player, false)
-    if not offer or #offer == 0 then
-        return false
-    end
-
-    if not OfferContains(offer, spellId) then
-        player:SendBroadcastMessage(
-            "[Talentos] Esa opción no pertenece a tu oferta actual."
-        )
-        M.EnsureAndSendOffer(player)
-        return true
-    end
-
-    if PicksRemaining(player) <= 0 then
-        ClearPendingOffer(guid)
-        player:SendAddonMessage("SpellChoiceClose", "", 0, player)
-        return true
-    end
-
-    local mapped = SPELL_TO_RANK[spellId]
-    local state = LoadCharacterState(player, false)
-    if not mapped
-        or not AventurerosProgression.IsTalentUnlocked(
-            player,
-            mapped.family.id
-        ) then
-        ClearPendingOffer(guid)
-        M.EnsureAndSendOffer(player)
-        return true
-    end
-
-    local currentRank = state.ranks[mapped.family.id] or 0
-    if mapped.rank ~= currentRank + 1 then
-        ClearPendingOffer(guid)
-        M.EnsureAndSendOffer(player)
-        return true
-    end
-
-    local talentIndex = state.count + 1
-    local level = player:GetLevel() or 1
-
+    local idx, level = state.count + 1, player:GetLevel() or 1
     CharDBExecute(string.format(
         "INSERT IGNORE INTO aventureros_character_talents "
-        .. "(player_guid, talent_id, talent_rank, talent_spell_id, "
-        .. "talent_index, picked_level) "
-        .. "VALUES (%u, '%s', %u, %u, %u, %u)",
-        guid,
-        mapped.family.id,
-        mapped.rank,
-        spellId,
-        talentIndex,
-        level
+        .. "(player_guid,talent_id,talent_rank,talent_spell_id,talent_index,picked_level) "
+        .. "VALUES (%u,'%s',%u,%u,%u,%u)",
+        guid, mapped.family.id, mapped.rank, spellId, idx, level
     ))
-
-    state.ranks[mapped.family.id] = mapped.rank
-    state.count = talentIndex
-    characterStateCache[guid] = state
-
-    LearnCurrentRank(player, mapped.family, mapped.rank)
+    state.ranks[mapped.family.id], state.count = mapped.rank, idx
+    stateCache[guid] = state
+    learnRank(player, mapped.family, mapped.rank)
     player:CastSpell(player, 24312, true)
     player:RemoveAura(24312)
-
-    ClearPendingOffer(guid)
-
-    if PicksRemaining(player) > 0 then
-        M.EnsureAndSendOffer(player)
-    else
-        player:SendAddonMessage("SpellChoiceClose", "", 0, player)
-    end
+    clearOffer(guid)
+    if picksRemaining(player) > 0 then M.EnsureAndSendOffer(player)
+    else player:SendAddonMessage("SpellChoiceClose", "", 0, player) end
     return true
 end
 
 function M.HandleProtocolMessage(player, msg)
-    if not IsAdventurer(player) or not msg then
-        return false
-    end
-
+    if not isAdventurer(player) or not msg then return false end
     msg = msg:gsub("%s+$", "")
-    if msg:sub(1, 2) ~= "SC" then
+    if msg:sub(1, 2) ~= "SC" or normalRemaining(player) > 0 or not M.HasPendingOffer(player) then
         return false
     end
-
-    -- Las habilidades normales siempre tienen prioridad si el personaje debe
-    -- resolver alguna. Esto permite acumular un Talento (N) pendiente sin
-    -- secuestrar el SC:<id> de un milestone de SpellDraft.
-    if NormalDraftsRemaining(player) > 0 then
-        return false
-    end
-
-    if not M.HasPendingOffer(player) then
-        return false
-    end
-
-    if msg == "SC_CHECK" then
-        M.EnsureAndSendOffer(player)
-        return true
-    end
-
+    if msg == "SC_CHECK" then M.EnsureAndSendOffer(player); return true end
     local picked = msg:match("^SC:(%d+)$")
-    if picked then
-        M.AcceptPick(player, tonumber(picked))
-        return true
+    if picked then M.AcceptPick(player, tonumber(picked)); return true end
+    if msg == "SC_REROLL" or msg == "SC_REPLACE_BANNED"
+        or msg:match("^SC_BAN:%d+$") or msg:match("^SC_PROTECT:%d+$") then
+        M.EnsureAndSendOffer(player); return true
     end
-
-    if msg == "SC_REROLL"
-        or msg == "SC_REPLACE_BANNED"
-        or msg:match("^SC_BAN:%d+$")
-        or msg:match("^SC_PROTECT:%d+$") then
-        M.EnsureAndSendOffer(player)
-        return true
-    end
-
     return false
 end
 
-local function StartWaitLoop(player)
-    if not IsAdventurer(player) then
-        return
-    end
-
+local function startWait(player)
+    if not isAdventurer(player) then return end
     local guid = player:GetGUIDLow()
-    local generation = (waitGeneration[guid] or 0) + 1
-    waitGeneration[guid] = generation
-
-    local function Tick()
-        if waitGeneration[guid] ~= generation then
-            return
-        end
-
-        local current = GetPlayerByGUID(guid)
-        if not current
-            or not current:IsInWorld()
-            or not IsAdventurer(current) then
-            return
-        end
-
-        if PicksRemaining(current) <= 0 then
-            return
-        end
-
-        if NormalDraftsRemaining(current) <= 0 then
-            M.EnsureAndSendOffer(current)
-            return
-        end
-
-        -- El jugador puede tardar todo lo que quiera en elegir su habilidad.
-        -- Seguimos esperando sin pedirle al motor de SpellDraft que nos avise.
-        CreateLuaEvent(Tick, WAIT_RETRY_MS, 1)
+    local gen = (generation[guid] or 0) + 1
+    generation[guid] = gen
+    local function tick()
+        if generation[guid] ~= gen then return end
+        local p = GetPlayerByGUID(guid)
+        if not p or not p:IsInWorld() or not isAdventurer(p) then return end
+        if picksRemaining(p) <= 0 then return end
+        if normalRemaining(p) <= 0 then M.EnsureAndSendOffer(p); return end
+        CreateLuaEvent(tick, RETRY_MS, 1)
     end
-
-    CreateLuaEvent(Tick, WAIT_RETRY_MS, 1)
+    CreateLuaEvent(tick, RETRY_MS, 1)
 end
 
-local function OnLogin(_, player)
-    if not IsAdventurer(player) then
-        return
-    end
-
-    LoadCharacterState(player, true)
-    LoadPendingOffer(player, true)
-    RestoreTalents(player)
-    StartWaitLoop(player)
+local function onLogin(_, player)
+    if not isAdventurer(player) then return end
+    loadState(player, true); loadOffer(player, true); restore(player); startWait(player)
 end
-
-local function OnLogout(_, player)
-    if not player then
-        return
-    end
-
+local function onLogout(_, player)
+    if not player then return end
     local guid = player:GetGUIDLow()
-    characterStateCache[guid] = nil
-    pendingOfferCache[guid] = nil
-    pendingOfferLoaded[guid] = nil
-    waitGeneration[guid] = (waitGeneration[guid] or 0) + 1
+    stateCache[guid], offerCache[guid], offerLoaded[guid] = nil, nil, nil
+    generation[guid] = (generation[guid] or 0) + 1
 end
+local function onLevel(_, player) startWait(player) end
 
-local function OnLevelChanged(_, player)
-    if not IsAdventurer(player) then
-        return
-    end
-    StartWaitLoop(player)
-end
+function M.GetExpectedPicks(player) return expectedPicks(player) end
+function M.GetRemainingPicks(player) return picksRemaining(player) end
+function M.GetNormalDraftsRemaining(player) return normalRemaining(player) end
 
-function M.GetExpectedPicks(player)
-    return ExpectedTalentPicks(player)
-end
-
-function M.GetRemainingPicks(player)
-    return PicksRemaining(player)
-end
-
-function M.GetNormalDraftsRemaining(player)
-    return NormalDraftsRemaining(player)
-end
-
-RegisterPlayerEvent(3, OnLogin)
-RegisterPlayerEvent(4, OnLogout)
-RegisterPlayerEvent(13, OnLevelChanged)
+RegisterPlayerEvent(3, onLogin)
+RegisterPlayerEvent(4, onLogout)
+RegisterPlayerEvent(13, onLevel)
 
 print(string.format(
-    "[Aventureros de Azeroth] Talent draft loaded: first=%u, every=%u, "
-    .. "max=%u, offer=%u, families=%u.",
-    FIRST_TALENT_LEVEL,
-    LEVELS_PER_TALENT,
-    MAX_TALENT_PICKS,
-    TALENT_OFFER_SIZE,
-    #TALENT_FAMILIES
+    "[Aventureros de Azeroth] Talent draft loaded: first=%u every=%u max=%u offer=%u families=%u.",
+    FIRST_LEVEL, LEVELS_PER_PICK, MAX_PICKS, OFFER_SIZE, #FAMILIES
 ))
