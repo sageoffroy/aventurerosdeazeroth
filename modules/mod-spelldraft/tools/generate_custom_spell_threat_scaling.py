@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""Generate level-aware threat rules for normalized SpellDraft cards.
-
-AzerothCore's spell_threat table is keyed by native spell IDs. Rankless
-Aventureros clones use deterministic 200000+root IDs, so they would otherwise
-lose native flat threat, threat multipliers, and AP threat coefficients.
-
-This generator resolves every normalized family, reads the explicit native
-spell_threat rows, and emits one rule per player level. Native threat rows are
-exact anchors; absolute flat threat uses the same level-offset + piecewise
-linear integer interpolation as spell magnitudes, while dimensionless
-coefficients stay constant below the first anchor and interpolate linearly only
-when native rows actually vary.
-"""
+"""Generate level-aware threat rules for normalized SpellDraft cards."""
 
 from __future__ import annotations
 
@@ -101,44 +89,28 @@ def linear_int(left: int, right: int, t: float) -> int:
     return -int(math.floor(abs(value) + 0.5))
 
 
-def linear_float(left: float, right: float, t: float) -> float:
-    return left + (right - left) * t
-
-
-def value_at(
-    anchors: list[ThreatAnchor],
-    level: int,
-    low_level_offset: float,
-) -> ThreatValue:
+def value_at(anchors: list[ThreatAnchor], level: int, low_level_offset: float) -> ThreatValue:
     points = sorted(anchors, key=lambda item: item.level)
     first = points[0]
-
     if level < first.level:
-        # Flat threat is an absolute magnitude, so it follows the canonical
-        # low-level offset rule. pct/ap coefficients describe mechanics and
-        # therefore stay fixed instead of being weakened below the first rank.
         ratio = (level + low_level_offset) / (first.level + low_level_offset)
         return ThreatValue(
             signed_scaled(first.value.flat, ratio),
             first.value.pct,
             first.value.ap_pct,
         )
-
     if level >= points[-1].level:
         return points[-1].value
-
     for index in range(len(points) - 1):
         left = points[index]
         right = points[index + 1]
         if left.level <= level <= right.level:
-            span = right.level - left.level
-            t = 0.0 if span == 0 else (level - left.level) / span
+            t = (level - left.level) / (right.level - left.level)
             return ThreatValue(
                 linear_int(left.value.flat, right.value.flat, t),
-                linear_float(left.value.pct, right.value.pct, t),
-                linear_float(left.value.ap_pct, right.value.ap_pct, t),
+                left.value.pct + (right.value.pct - left.value.pct) * t,
+                left.value.ap_pct + (right.value.ap_pct - left.value.ap_pct) * t,
             )
-
     raise ThreatError(f"failed to interpolate threat at level {level}")
 
 
@@ -149,6 +121,7 @@ def main() -> None:
     parser.add_argument("--spell-ranks", required=True, type=Path)
     parser.add_argument("--spell-threat", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--class-name", required=True)
     parser.add_argument("--max-level", type=int, default=80)
     parser.add_argument("--low-level-offset", type=float, default=2.0)
     args = parser.parse_args()
@@ -156,8 +129,9 @@ def main() -> None:
     dbc_dir = args.dbc_dir.expanduser().resolve()
     resolved_path = args.resolved.expanduser().resolve()
     output = args.output.expanduser().resolve()
-    if args.max_level <= 0:
-        raise SystemExit("--max-level must be positive")
+    class_name = args.class_name.strip().upper()
+    if args.max_level <= 0 or not class_name:
+        raise SystemExit("invalid max level/class name")
 
     try:
         resolved = load_json(resolved_path)
@@ -165,58 +139,48 @@ def main() -> None:
         if not isinstance(spells, list) or not spells:
             raise ThreatError(f"{resolved_path}: expected non-empty spells list")
 
-        _root_by_spell, ranks_by_root = parse_spell_ranks(
-            args.spell_ranks.expanduser().resolve()
-        )
+        selected = [spell for spell in spells if str(spell.get("class", "")).upper() == class_name]
+        if not selected:
+            raise ThreatError(f"{resolved_path}: no normalized spells for class {class_name}")
+
+        _root_by_spell, ranks_by_root = parse_spell_ranks(args.spell_ranks.expanduser().resolve())
         levels = spell_levels(dbc_dir / "Spell.dbc")
         threat = parse_threat(args.spell_threat.expanduser().resolve())
-
         lines = [
-            "# custom_spell_threat_scaling.tsv v1",
+            f"# custom_spell_threat_scaling.tsv v1 class={class_name}",
             "# spell_id\tlevel\tflat_mod\tpct_mod\tap_pct_mod",
         ]
         family_count = 0
         anchor_count = 0
 
-        for spell in sorted(spells, key=lambda item: int(item["id"])):
+        for spell in sorted(selected, key=lambda item: int(item["id"])):
             custom_id = int(spell["id"])
             root = int(spell["clone_from"])
-            rank_rows = ranks_by_root.get(root, [(1, root)])
             anchors: list[ThreatAnchor] = []
-
-            for _rank, native_id in rank_rows:
+            for _rank, native_id in ranks_by_root.get(root, [(1, root)]):
                 value = threat.get(native_id)
                 if value is None:
                     continue
                 native_level = levels.get(native_id)
                 if native_level is None:
-                    raise ThreatError(
-                        f"native threat spell {native_id} for root {root} is missing from Spell.dbc"
-                    )
+                    raise ThreatError(f"native threat spell {native_id} is missing from Spell.dbc")
                 anchors.append(ThreatAnchor(native_id, native_level, value))
-
             if not anchors:
                 continue
 
-            # Multiple explicit rows at the same level are collapsed only when
-            # their semantics agree; conflicting data should fail loudly.
             by_level: dict[int, ThreatAnchor] = {}
             for anchor in anchors:
                 previous = by_level.get(anchor.level)
                 if previous and previous.value != anchor.value:
-                    raise ThreatError(
-                        f"root {root}: conflicting threat anchors at level {anchor.level}"
-                    )
+                    raise ThreatError(f"root {root}: conflicting threat anchors at level {anchor.level}")
                 by_level[anchor.level] = anchor
             anchors = [by_level[level] for level in sorted(by_level)]
 
             for level in range(1, args.max_level + 1):
                 value = value_at(anchors, level, args.low_level_offset)
                 lines.append(
-                    f"{custom_id}\t{level}\t{value.flat}\t"
-                    f"{value.pct:.6f}\t{value.ap_pct:.6f}"
+                    f"{custom_id}\t{level}\t{value.flat}\t{value.pct:.6f}\t{value.ap_pct:.6f}"
                 )
-
             family_count += 1
             anchor_count += len(anchors)
 
@@ -226,7 +190,7 @@ def main() -> None:
         raise SystemExit(f"Normalized threat generation aborted: {exc}") from exc
 
     print(
-        f"Normalized threat scaling generated: {family_count} families, "
+        f"Normalized {class_name} threat scaling generated: {family_count} families, "
         f"{anchor_count} explicit native anchors, levels 1-{args.max_level}"
     )
     print(f"  output: {output}")
