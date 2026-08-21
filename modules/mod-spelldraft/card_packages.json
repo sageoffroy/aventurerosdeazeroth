@@ -81,26 +81,6 @@
         200604
       ],
       "teaches_by_team": {}
-    },
-    {
-      "card_id": 190004,
-      "source_spell_id": 42955,
-      "name": "Maestro de Festines",
-      "description": "Aprendes Crear comida, Crear agua y Crear refrigerio.",
-      "rarity": 1,
-      "class_set": 3,
-      "min_level": 1,
-      "passive_marker": true,
-      "remove_item_requirements": false,
-      "exclude_from_pool": [
-        43987
-      ],
-      "teaches": [
-        200587,
-        205504,
-        242955
-      ],
-      "teaches_by_team": {}
     }
   ]
 }
