@@ -1,13 +1,14 @@
 {
   "version": 1,
   "enabled": true,
-  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. Only offerable draft-card IDs in spells[] are eligible while enabled. For the current Mage pass, portal/package cards and all three Mage armors are approved; Frostbolt, Fireball and Arcane Intellect remain under review.",
+  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. The current Mage pass has the portal/package cards, all three armors, Frostbolt and Fireball approved. Arcane Intellect remains under review for group propagation, and Maestro de Festines is the next package under review.",
   "spells": [
     { "id": 190001, "name": "Maestro de Portales", "status": "approved" },
     { "id": 190002, "name": "Resguardo Elemental", "status": "approved" },
     { "id": 190003, "name": "Manipulación Mágica", "status": "approved" },
-    { "id": 200116, "name": "Frostbolt", "status": "reviewing" },
-    { "id": 200133, "name": "Fireball", "status": "reviewing" },
+    { "id": 190004, "name": "Maestro de Festines", "status": "reviewing" },
+    { "id": 200116, "name": "Frostbolt", "status": "approved" },
+    { "id": 200133, "name": "Fireball", "status": "approved" },
     { "id": 206117, "name": "Mage Armor", "status": "approved" },
     { "id": 207302, "name": "Ice Armor", "status": "approved" },
     { "id": 230482, "name": "Molten Armor", "status": "approved" },
