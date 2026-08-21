@@ -36,7 +36,7 @@ Categorías primarias:
 | Sanación | 0 | — |
 | Defensa | 4 | `190002 Resguardo Elemental`, `207302 Ice Armor`, `206117 Mage Armor`, `230482 Molten Armor` — APROBADO |
 | Soporte | 2 | `190003 Manipulación Mágica` — APROBADO; `201459 Intelecto Arcano` — REVISANDO |
-| Utilidad/Otras | 2 | `190001 Maestro de Portales` — APROBADO; `190004 Maestro de Festines` — REVISANDO |
+| Utilidad/Otras | 2 | `190001 Maestro de Portales` — APROBADO; `242955 Crear refrigerio` — REVISANDO |
 | **Total** | **10** | **8 APROBADAS + 2 REVISANDO** |
 
 `18960 Teleport: Moonglade` es una regla especial racial/lore y no se suma todavía al contador del pool auditado. `55342 Mirror Image` está en STANDBY y tampoco se cuenta hasta retomar su auditoría.
@@ -136,22 +136,26 @@ Prueba directa:
 .learn 201459
 ```
 
-### 190004 — Maestro de Festines
+### 242955 — Crear refrigerio
 
 **Estado:** REVISANDO
 
-Diseño decidido:
+Decisión de diseño actualizada durante la prueba:
 
-- Una sola carta de utilidad comprime las tres líneas de creación de alimento/bebida del Mago.
-- Enseña:
-  - `200587` — Crear comida, raíz nativa `587`.
-  - `205504` — Crear agua, raíz nativa `5504`.
-  - `242955` — Crear refrigerio, raíz nativa `42955`.
-- Marcador pasivo/rankless.
-- `43987 Ritual of Refreshment` queda FUERA explícitamente y no forma parte del paquete.
-- Rareza temporal: Uncommon.
-- Icono/fuente visual actual: `42955 Conjure Refreshment`.
-- Falta prueba en el draft real para confirmar que la carta enseña las tres habilidades.
+- Se elimina el paquete temporal `190004 Maestro de Festines`.
+- `242955 Crear refrigerio`, normalización de la raíz nativa `42955`, pasa a ser la única carta de creación de alimento/bebida del Mago.
+- `200587 Crear comida` y `205504 Crear agua` quedan FUERA como elecciones independientes: una vez que el refrigerio recupera vida y maná, mantener las líneas separadas sólo agrega cartas redundantes.
+- `43987 Ritual of Refreshment` continúa FUERA explícitamente.
+- La prueba confirmó que el hechizo crea `43518 Tarta de maná mágica`.
+- Problema detectado: el objeto nativo exige nivel 74 y restaura valores fijos de nivel alto (18480 p. de salud y 12840 p. de maná durante 30 s), por lo que no puede reutilizarse sin adaptación para una carta disponible desde nivel 1.
+- No se va a resolver bajando simplemente `RequiredLevel`: eso dejaría la restauración de nivel alto disponible a nivel 1.
+- Próximo paso técnico: identificar los spell IDs de uso del `item_template` 43518 y adaptar un único refrigerio para que su restauración escale por nivel dentro del pipeline canónico, evitando crear una colección paralela de comidas por rango.
+
+Prueba directa del hechizo:
+
+```text
+.learn 242955
+```
 
 ---
 
