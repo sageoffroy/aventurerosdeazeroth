@@ -34,10 +34,10 @@ Categorías primarias:
 | --- | ---: | --- |
 | Daño | 2 | `200116 Frostbolt`, `200133 Fireball` — APROBADO |
 | Sanación | 0 | — |
-| Defensa | 4 | `190002 Resguardo Elemental`, `207302 Ice Armor`, `206117 Mage Armor`, `230482 Molten Armor` — APROBADO |
+| Defensa | 4 | `190002 Resguardo Elemental`, `207302 Ice Armor`, `230482 Molten Armor` — APROBADO; `206117 Mage Armor` — REVISANDO |
 | Soporte | 2 | `190003 Manipulación Mágica` — APROBADO; `201459 Intelecto Arcano` — REVISANDO |
 | Utilidad/Otras | 2 | `190001 Maestro de Portales` — APROBADO; `242955 Crear refrigerio` — REVISANDO |
-| **Total** | **10** | **8 APROBADAS + 2 REVISANDO** |
+| **Total** | **10** | **7 APROBADAS + 3 REVISANDO** |
 
 `18960 Teleport: Moonglade` es una regla especial racial/lore y no se suma todavía al contador del pool auditado. `55342 Mirror Image` está en STANDBY y tampoco se cuenta hasta retomar su auditoría.
 
@@ -95,17 +95,23 @@ Este bloque debe actualizarse cada vez que una carta se aprueba, se elimina, se 
 - Daño directo y DoT funcionan correctamente.
 - Tooltip y valores reales fueron confirmados en juego.
 
-### Armaduras de Mago
+### 207302 — Ice Armor
 
 **Estado:** APROBADO
 
 - `Frost Armor` raíz `168` queda FUERA como carta independiente.
-- `207302 Ice Armor`, `206117 Mage Armor` y `230482 Molten Armor` quedan como tres elecciones distintas de build.
-- Las tres son rankless y usan el pipeline canónico desde nivel 1.
+- `207302 Ice Armor` queda como elección defensiva rankless y usa el pipeline canónico desde nivel 1.
+- Funcionamiento verificado en juego.
+
+### 230482 — Molten Armor
+
+**Estado:** APROBADO
+
+- Queda como elección defensiva independiente rankless y usa el pipeline canónico desde nivel 1.
 - `34913` es el helper reactivo interno de Molten Armor y nunca es carta.
 - `230482` fue corregida para disparar el helper normalizado `234913`, evitando el daño nativo de nivel alto en nivel 1.
-- El tooltip de Molten Armor fue corregido para mostrar el daño escalado del helper; a nivel 1 refleja aproximadamente 4 p. y el popup muestra el mismo valor.
-- Las tres armaduras fueron verificadas funcionalmente en juego.
+- El tooltip fue corregido para mostrar el daño escalado del helper; a nivel 1 refleja aproximadamente 4 p. y el popup muestra el mismo valor.
+- Funcionamiento verificado en juego.
 
 ### 18960 — Teleport: Moonglade
 
@@ -117,6 +123,23 @@ Este bloque debe actualizarse cada vez que una carta se aprueba, se elimina, se 
 ---
 
 ## REVISANDO
+
+### 206117 — Mage Armor
+
+**Estado:** REVISANDO
+
+La habilidad funciona, pero se reabre por dos problemas detectados en juego:
+
+- El efecto visual de Armadura de mago queda **colgado/persistente** después de que debería desaparecer o ser reemplazado.
+- El tooltip muestra `Aumenta tu resistencia a toda la magia 2-1 p.`. Esto es incorrecto: el valor observado en juego es **1 p. fijo**, no un rango 2-1.
+
+No se considera cerrada hasta corregir el visual persistente y mostrar el valor fijo correcto en el tooltip.
+
+Prueba directa:
+
+```text
+.learn 206117
+```
 
 ### 201459 — Intelecto Arcano
 
@@ -146,10 +169,12 @@ Decisión de diseño actualizada durante la prueba:
 - `242955 Crear refrigerio`, normalización de la raíz nativa `42955`, pasa a ser la única carta de creación de alimento/bebida del Mago.
 - `200587 Crear comida` y `205504 Crear agua` quedan FUERA como elecciones independientes: una vez que el refrigerio recupera vida y maná, mantener las líneas separadas sólo agrega cartas redundantes.
 - `43987 Ritual of Refreshment` continúa FUERA explícitamente.
-- La prueba confirmó que el hechizo crea `43518 Tarta de maná mágica`.
-- Problema detectado: el objeto nativo exige nivel 74 y restaura valores fijos de nivel alto (18480 p. de salud y 12840 p. de maná durante 30 s), por lo que no puede reutilizarse sin adaptación para una carta disponible desde nivel 1.
+- La prueba confirmó que el hechizo crea `43518 Conjured Mana Pie / Tarta de maná mágica`.
+- `item_template 43518`: ItemLevel 84, RequiredLevel 74, spell de uso `61828`.
+- Como referencia de nivel 80, `item_template 43523 Conjured Mana Strudel`: ItemLevel 90, RequiredLevel 80, spell de uso `58648`.
+- Problema detectado: el objeto nativo exige nivel alto y restaura valores fijos de nivel alto, por lo que no puede reutilizarse sin adaptación para una carta disponible desde nivel 1.
 - No se va a resolver bajando simplemente `RequiredLevel`: eso dejaría la restauración de nivel alto disponible a nivel 1.
-- Próximo paso técnico: identificar los spell IDs de uso del `item_template` 43518 y adaptar un único refrigerio para que su restauración escale por nivel dentro del pipeline canónico, evitando crear una colección paralela de comidas por rango.
+- Próximo paso técnico: inspeccionar `61828` y `58648` y la progresión nativa de refrigerios para usar esos valores como anchors de una única comida escalable por nivel, sin crear una colección paralela de comidas por rango.
 
 Prueba directa del hechizo:
 
