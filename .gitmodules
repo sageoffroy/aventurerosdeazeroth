@@ -1,0 +1,3 @@
+[submodule "modules/mod-dungeon-master"]
+	path = modules/mod-dungeon-master
+	url = https://github.com/InstanceForge/mod-dungeon-master.git
