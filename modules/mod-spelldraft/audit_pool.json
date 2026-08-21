@@ -8,7 +8,9 @@
     { "id": 190003, "name": "Manipulación Mágica", "status": "approved" },
     { "id": 200116, "name": "Frostbolt", "status": "reviewing" },
     { "id": 200133, "name": "Fireball", "status": "reviewing" },
-    { "id": 200168, "name": "Frost Armor", "status": "reviewing" },
+    { "id": 206117, "name": "Mage Armor", "status": "reviewing" },
+    { "id": 207302, "name": "Ice Armor", "status": "reviewing" },
+    { "id": 230482, "name": "Molten Armor", "status": "reviewing" },
     { "id": 201459, "name": "Arcane Intellect", "status": "reviewing" }
   ],
   "reviewed_test_ids": []
