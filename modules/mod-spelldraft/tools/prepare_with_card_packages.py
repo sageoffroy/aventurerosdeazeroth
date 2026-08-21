@@ -46,6 +46,9 @@ def main() -> None:
     resolved = data_dir / "spelldraft" / "custom_spells.resolved.json"
     profiles = data_dir / "spelldraft" / "custom_spell_profiles.resolved.json"
     scaling = data_dir / "spelldraft" / "custom_spell_scaling.tsv"
+    threat_scaling = data_dir / "spelldraft" / "custom_spell_threat_scaling.tsv"
+    spell_ranks_sql = REPO / "data/sql/base/db_world/spell_ranks.sql"
+    spell_threat_sql = REPO / "data/sql/base/db_world/spell_threat.sql"
 
     prepare_args = [
         sys.executable,
@@ -64,6 +67,43 @@ def main() -> None:
     if args.dbc_src:
         prepare_args.extend(["--dbc-src", str(dbc_src)])
     run(*prepare_args)
+
+    # spell_threat lives in the world DB rather than Spell.dbc. Rankless custom
+    # IDs therefore need their own level-aware flat-threat curve. Generate it
+    # from the same native families and fail immediately if any explicit native
+    # threat anchor does not round-trip exactly.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "generate_custom_spell_threat_scaling.py"),
+        "--dbc-dir",
+        str(dbc_src),
+        "--resolved",
+        str(resolved),
+        "--spell-ranks",
+        str(spell_ranks_sql),
+        "--spell-threat",
+        str(spell_threat_sql),
+        "--output",
+        str(threat_scaling),
+        "--max-level",
+        "80",
+        "--low-level-offset",
+        "2.0",
+    )
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "validate_custom_spell_threat_scaling.py"),
+        "--dbc-dir",
+        str(dbc_src),
+        "--resolved",
+        str(resolved),
+        "--spell-ranks",
+        str(spell_ranks_sql),
+        "--spell-threat",
+        str(spell_threat_sql),
+        "--scaling",
+        str(threat_scaling),
+    )
 
     run(
         sys.executable,
@@ -228,6 +268,7 @@ def main() -> None:
     print("Crear refrigerio usa una unica Tarta de mana con restauracion escalada 1-80 mediante el TSV canonico.")
     print("Las cartas-paquete son marcadores sin rango visible (sin Rank 1 / Rango 1 heredado).")
     print("La UI canonica de teaches muestra tambien las habilidades de cartas-paquete.")
+    print("Threat normalizado: los anchors explicitos de spell_threat deben validar con desviacion 0.00%.")
     print("Audit pool: si audit_pool.json esta habilitado, solo ofrece su whitelist.")
 
 
