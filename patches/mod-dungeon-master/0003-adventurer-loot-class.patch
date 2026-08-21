@@ -1,0 +1,33 @@
+diff --git a/src/DungeonMasterMgr.cpp b/src/DungeonMasterMgr.cpp
+--- a/src/DungeonMasterMgr.cpp
++++ b/src/DungeonMasterMgr.cpp
+@@ -2371,7 +2371,13 @@ void DungeonMasterMgr::FillCreatureLoot(Creature* creature, Session* session, bo
+         {
+             Player* p = ObjectAccessor::FindPlayer(pd.PlayerGuid);
+             if (p && p->IsAlive())
+-                classes.push_back(p->getClass());
++            {
++                // Aventureros: class 10 is our classless runtime class, not a
++                // native WotLK AllowableClass bit.  Use class 0 here so the
++                // existing loot selector treats it as unrestricted instead of
++                // filtering every normal equipment item out of the pool.
++                uint32 playerClass = p->getClass();
++                classes.push_back(playerClass == 10 ? 0u : playerClass);
++            }
+         }
+         if (classes.empty())
+         {
+@@ -2380,7 +2386,12 @@ void DungeonMasterMgr::FillCreatureLoot(Creature* creature, Session* session, bo
+             for (const auto& pd : session->Players)
+             {
+                 Player* p = ObjectAccessor::FindPlayer(pd.PlayerGuid);
+-                if (p) { classes.push_back(p->getClass()); break; }
++                if (p)
++                {
++                    uint32 playerClass = p->getClass();
++                    classes.push_back(playerClass == 10 ? 0u : playerClass);
++                    break;
++                }
+             }
+         }
+         if (!classes.empty())
