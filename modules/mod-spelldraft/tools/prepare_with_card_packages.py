@@ -44,6 +44,7 @@ def main() -> None:
     output = args.output_dir.expanduser().resolve()
     runtime_catalog = install / "bin" / "lua_scripts" / "SpellDraft" / "catalog.lua"
     resolved = data_dir / "spelldraft" / "custom_spells.resolved.json"
+    profiles = data_dir / "spelldraft" / "custom_spell_profiles.resolved.json"
     scaling = data_dir / "spelldraft" / "custom_spell_scaling.tsv"
 
     prepare_args = [
@@ -93,6 +94,48 @@ def main() -> None:
         str(TOOLS_DIR / "patch_client_teaches_ui.py"),
         "--client-dir",
         str(client),
+    )
+
+    # Some wrappers/channels execute their real numeric effect through a ranked
+    # internal helper family that is not itself a draft card. If a reviewed
+    # normalize_trigger_spells entry points at such a helper, create its
+    # deterministic 200000+ clone from canonical native ranks and append it to
+    # the SAME profile/scaling artifacts used by normal cards. No second runtime
+    # scaling engine is introduced.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "ensure_reviewed_internal_helpers.py"),
+        "--dbc-dir",
+        str(dbc_src),
+        "--resolved",
+        str(resolved),
+        "--profiles",
+        str(profiles),
+        "--scaling",
+        str(scaling),
+    )
+
+    # Revalidate after internal helper expansion, then regenerate the loose
+    # client tooltip data so reviewed parent spells can display helper curves.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "validate_profiled_spell_scaling.py"),
+        "--profiles",
+        str(profiles),
+        "--scaling",
+        str(scaling),
+        "--dbc-dir",
+        str(dbc_src),
+    )
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "patch_spelldraft_profiled_tooltips.py"),
+        "--client-dir",
+        str(client),
+        "--profiles",
+        str(profiles),
+        "--dbc-dir",
+        str(dbc_src),
     )
 
     # Reviewed special cases mutate the already-normalized runtime card without
@@ -181,6 +224,7 @@ def main() -> None:
     print("Los Portales no requieren componentes; Teleports/Portals individuales quedan fuera del pool.")
     print("Teleport: Moonglade usa el ID nativo y solo es elegible para Elfos de la Noche.")
     print("Arcane Intellect conserva identidad/escalado, usa comportamiento grupal y fuerza duracion runtime de 1 hora.")
+    print("Arcane Missiles usa un helper de proyectil normalizado por la misma curva canonica 1-80.")
     print("Crear refrigerio usa una unica Tarta de mana con restauracion escalada 1-80 mediante el TSV canonico.")
     print("Las cartas-paquete son marcadores sin rango visible (sin Rank 1 / Rango 1 heredado).")
     print("La UI canonica de teaches muestra tambien las habilidades de cartas-paquete.")
