@@ -57,6 +57,23 @@ Correcciones cerradas durante la prueba:
 
 Pendiente **sólo cosmético**: se preparó el icono `Spell_ElementalArmor.tga`, pero el override visual de la carta todavía no lo toma. Esto no bloquea la aprobación funcional y se resolverá más adelante junto con los iconos personalizados.
 
+### 190003 — Manipulación Mágica
+
+**Estado:** APROBADO
+
+Decisión final:
+
+- Una sola carta comprime **Amplificar magia** y **Atenuar magia**.
+- Al elegirla se aprenden las dos habilidades activas normalizadas:
+  - `201008` — Amplificar magia (raíz nativa `1008`).
+  - `200604` — Atenuar magia (raíz nativa `604`).
+- Las dos habilidades dejan de aparecer como elecciones independientes del draft porque pasan a pertenecer al `TeachMap` del paquete.
+- La carta `190003 Manipulación Mágica` queda como marcador pasivo/rankless.
+- Icono decidido: `Spell_Holy_Serendipity`; se usa como fuente el spell nativo `63731 Serendipity`, que posee ese icono en WotLK. Como el marcador elimina los efectos ejecutables y reemplaza nombre/descripcion, sólo heredamos su presentación/icono.
+- Rareza temporal: **Uncommon**; se revisará junto con el balance final.
+- La UI canónica de `teaches` muestra los dos cuadritos a la derecha.
+- Prueba funcional en juego confirmada: el paquete funciona correctamente y enseña ambos hechizos.
+
 ### 18960 — Teleport: Moonglade
 
 **Estado:** regla técnica/lore aplicada
@@ -95,24 +112,6 @@ Prueba directa:
 ```text
 .learn 201459
 ```
-
-### 190003 — Manipulación Mágica
-
-**Estado:** REVISANDO
-
-Decisión de diseño:
-
-- Una sola carta comprime **Amplificar magia** y **Atenuar magia**.
-- Al elegirla se aprenden las dos habilidades activas normalizadas:
-  - `201008` — Amplificar magia (raíz nativa `1008`).
-  - `200604` — Atenuar magia (raíz nativa `604`).
-- Las dos habilidades dejan de aparecer como elecciones independientes del draft porque pasan a pertenecer al `TeachMap` del paquete.
-- La carta `190003 Manipulación Mágica` queda como marcador pasivo/rankless.
-- Icono decidido: `Spell_Holy_Serendipity`; se usa como fuente el spell nativo `63731 Serendipity`, que posee ese icono en WotLK. Como el marcador elimina los efectos ejecutables y reemplaza nombre/descripcion, sólo heredamos su presentación/icono.
-- Rareza temporal: **Uncommon**; se revisará junto con el balance final.
-- La UI canónica de `teaches` debe mostrar los dos cuadritos a la derecha automáticamente, igual que Resguardo Elemental.
-
-Falta prueba funcional en juego antes de aprobarla.
 
 ---
 
