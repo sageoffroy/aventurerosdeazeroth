@@ -16,6 +16,35 @@ La fuente técnica sigue siendo el código/JSON correspondiente; este documento 
 
 # Mago
 
+## Contador funcional del pool auditado
+
+El contador principal mide **elecciones/cartas del draft**, no la cantidad de hechizos internos que una carta paquete puede enseñar. Así una carta como `Resguardo Elemental` cuenta una sola vez para medir la composición real del pool.
+
+Cada carta tiene una **categoría primaria** y puede tener etiquetas secundarias (por ejemplo control, movilidad, recurso, invocación) sin duplicar el total.
+
+Categorías primarias usadas durante toda la auditoría:
+
+- **Daño**: su función principal es causar daño.
+- **Sanación**: su función principal es recuperar vida.
+- **Defensa**: mitigación, absorción, armadura, resistencias o supervivencia personal.
+- **Soporte**: buffs/debuffs, mejoras de grupo, manipulación de estadísticas o recursos de combate.
+- **Utilidad/Otras**: viaje, invocaciones, creación de objetos, herramientas especiales y efectos que no encajan principalmente en las anteriores.
+
+### Mago — contador actual
+
+| Categoría | Cartas | Estado actual |
+| --- | ---: | --- |
+| Daño | 2 | `200116 Frostbolt`, `200133 Fireball` — REVISANDO |
+| Sanación | 0 | — |
+| Defensa | 4 | `190002 Resguardo Elemental` — APROBADO; `207302 Ice Armor`, `206117 Mage Armor`, `230482 Molten Armor` — REVISANDO |
+| Soporte | 2 | `190003 Manipulación Mágica` — APROBADO; `201459 Intelecto Arcano` — REVISANDO |
+| Utilidad/Otras | 1 | `190001 Maestro de Portales` — APROBADO |
+| **Total** | **9** | **3 APROBADAS + 6 REVISANDO** |
+
+`18960 Teleport: Moonglade` es una regla especial racial/lore y no se suma todavía al contador del pool auditado porque no forma parte de la whitelist actual. `55342 Mirror Image` está en STANDBY y tampoco se cuenta hasta retomar su auditoría.
+
+Este bloque debe actualizarse cada vez que una carta se aprueba, se elimina, se empaqueta o cambia de función primaria.
+
 ## APROBADO
 
 ### 190001 — Maestro de Portales
@@ -127,7 +156,13 @@ Decisión de diseño:
 - No se crea ningún paquete para estas tres armaduras: son tres elecciones distintas de build.
 - La whitelist de auditoría contiene solamente `207302`, `206117` y `230482` para este bloque.
 
-Falta prueba funcional en juego de las tres armaduras antes de aprobarlas.
+Prueba funcional:
+
+- Las tres armaduras se aprendieron y activaron correctamente en juego.
+- `Ice Armor` mostró valores bajos apropiados para nivel 1 en sus magnitudes escalables; el `30%` de ralentización y `25%` de reducción de velocidad de ataque son mecánicas fijas de la habilidad.
+- `Molten Armor` reveló que su daño reactivo seguía disparando el helper nativo `34913`, cuyo valor de rango alto era demasiado fuerte para nivel 1.
+- Corrección aplicada: `230482` redirige su trigger interno hacia el helper normalizado `234913`, manteniendo `34913` fuera del pool y usando el pipeline canónico para escalar el daño reactivo por nivel.
+- Falta únicamente retestar el daño reactivo de `230482` a nivel 1 antes de aprobar las tres.
 
 ---
 
