@@ -7,6 +7,10 @@ import argparse
 import shutil
 from pathlib import Path
 
+from patch_spelldraft_protection_carry import (
+    ProtectionCarryPatchError,
+    patch_protection_carry,
+)
 from patch_spelldraft_protocol import ProtocolPatchError, patch_server_runtime
 
 TOOLS = Path(__file__).resolve().parent
@@ -41,12 +45,19 @@ def main() -> None:
     runtime_draft = destination / "SpellDraft" / "draft.lua"
     try:
         protocol_changed = patch_server_runtime(runtime_draft)
+        protection_changed = patch_protection_carry(runtime_draft)
     except ProtocolPatchError as exc:
         raise SystemExit(f"SpellDraft runtime protocol patch aborted: {exc}") from exc
+    except ProtectionCarryPatchError as exc:
+        raise SystemExit(f"SpellDraft protection carry patch aborted: {exc}") from exc
 
     print(
         "STAGE: SpellDraft protocol CHAT bridge "
         + ("patched" if protocol_changed else "already valid")
+    )
+    print(
+        "STAGE: SpellDraft protection carry "
+        + ("patched" if protection_changed else "already valid")
     )
     print(f"SpellDraft Lua runtime staged: {copied} file(s) -> {destination}")
 
