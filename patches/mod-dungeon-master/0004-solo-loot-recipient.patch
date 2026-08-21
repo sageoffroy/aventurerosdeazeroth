@@ -1,0 +1,36 @@
+diff --git a/src/DungeonMasterMgr.cpp b/src/DungeonMasterMgr.cpp
+--- a/src/DungeonMasterMgr.cpp
++++ b/src/DungeonMasterMgr.cpp
+@@ -2437,14 +2437,20 @@ void DungeonMasterMgr::FillCreatureLoot(Creature* creature, Session* session, bo
+     Group*  group  = nullptr;
+     for (const auto& pd : session->Players)
+     {
+         Player* p = ObjectAccessor::FindPlayer(pd.PlayerGuid);
+-        if (p && p->IsInWorld() && p->GetGroup())
++        if (!p || !p->IsInWorld())
++            continue;
++
++        // Aventureros: solo runs must still have a valid loot recipient.
++        // Prefer the first in-world session player, then upgrade to a grouped
++        // player if this is a party run so group loot rules keep working.
++        if (!looter)
++            looter = p;
++
++        if (p->GetGroup())
+         {
+             looter = p;
+             group  = p->GetGroup();
+             break;
+         }
+     }
+@@ -2475,7 +2481,10 @@ void DungeonMasterMgr::FillCreatureLoot(Creature* creature, Session* session, bo
+     }
+     else if (looter)
+     {
+         creature->SetLootRecipient(looter);
++
++        // Push the post-death lootable/recipient state immediately in solo mode.
++        creature->SendUpdateToPlayer(looter);
+     }
+     
+     LOG_INFO("module", "DungeonMaster: FillCreatureLoot complete for {} (GUID: {}, Boss: {}, Level: {}, Gold: {}, Items: {})",
