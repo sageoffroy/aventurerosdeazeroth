@@ -14,7 +14,7 @@ La fuente técnica sigue siendo el código/JSON correspondiente. Este documento 
 
 ## Modalidad de trabajo actual
 
-Mientras no haya acceso al juego se continúa el Mago sin pruebas manuales: inventario, decisiones, compatibilidad técnica y código. Todo lo nuevo permanece **REVISANDO** hasta una única pasada integral del Mago en juego. Después de esa pasada se corrigen los defectos juntos y recién entonces se abre la siguiente clase.
+Mientras no haya acceso al juego se continúa la auditoría sin pruebas manuales: inventario, decisiones, compatibilidad técnica y código. Cada clase queda técnicamente preparada y permanece **REVISANDO** hasta una única pasada integral en juego. Después de esa pasada se corrigen los defectos juntos y se cierra la clase.
 
 ---
 
@@ -120,6 +120,16 @@ Daño, casteo y ralentización confirmados contra tooltip/runtime.
 
 Daño directo, DoT y tooltip confirmados.
 
+### 205143 — Arcane Missiles — REVISANDO
+
+- Se conserva como ataque canalizado independiente.
+- El canal raíz `5143` no contiene el daño de los proyectiles: dispara la familia interna rankeada raíz `7268`.
+- Se añadió una solución general para helpers internos rankeados declarados en `normalize_trigger_spells`: si el helper no es una carta y por eso no fue normalizado por el catálogo, se genera automáticamente su clon determinista usando la familia nativa completa y el mismo pipeline canónico.
+- Para Misiles Arcanos: `7268 -> 207268`.
+- `205143` se remapea para disparar `207268`; el helper queda interno y FUERA del pool.
+- La curva 1-80 del helper usa `custom_spell_scaling.tsv`, no un runtime paralelo.
+- La pasada final debe validar duración del canal, un proyectil por segundo, cantidad de impactos, daño por proyectil, tooltip, críticos/procs y que `207268` nunca sea carta.
+
 ### 207302 — Ice Armor — APROBADO
 
 - `Frost Armor` raíz `168` queda FUERA como carta independiente.
@@ -198,6 +208,18 @@ Se añadió una compatibilidad **general** en `SpellScriptLoader.cpp`:
 
 Así no se agregan aliases SQL spell por spell. La solución servirá automáticamente para las demás clases.
 
+### Helpers internos rankeados
+
+`ensure_reviewed_internal_helpers.py` completa un hueco general del normalizador:
+
+- una carta puede ser sólo un wrapper/canal y ejecutar su magnitud real mediante otra familia de hechizos;
+- esas familias internas no aparecen como cartas y por eso el normalizador de catálogo no necesariamente las selecciona;
+- cuando una mutación revisada declara `normalize_trigger_spells`, el preparador genera automáticamente cualquier helper faltante como `200000 + native_root` usando su `spell_ranks` canónico;
+- sus curvas 1-80 y perfiles terminan en los mismos `custom_spell_scaling.tsv` / `custom_spell_profiles.resolved.json`;
+- la mutación existente sigue siendo la dueña del remapeo del trigger del padre.
+
+Misiles Arcanos `7268 -> 207268` es el primer caso que aprovecha esta generalización; Molten Armor `34913 -> 234913` también queda cubierto cuando corresponda.
+
 ### Consumibles escalables
 
 `apply_reviewed_consumable_scaling.py` se generalizó para soportar:
@@ -246,5 +268,7 @@ Por cada clase:
 4. una pasada integral en juego;
 5. correcciones finales;
 6. balance y cierre de la clase.
+
+Regla general adicional: una variante puramente cosmética no ocupa una elección separada del draft.
 
 La whitelist acelera la auditoría pero no reemplaza el catálogo completo ni sus dependencias.
