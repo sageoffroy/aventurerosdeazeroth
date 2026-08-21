@@ -4134,7 +4134,10 @@ void Spell::handle_immediate()
     // start channeling if applicable
     if (m_spellInfo->IsChanneled())
     {
-        int32 duration = m_spellInfo->GetDuration();
+        // Script/runtime duration overrides must also drive the channel timer.
+        int32 duration = m_spellValue->AuraDuration != 0
+            ? m_spellValue->AuraDuration
+            : m_spellInfo->GetDuration();
         if (HasTriggeredCastFlag(TRIGGERED_IGNORE_EFFECTS))
             duration = -1;
 
