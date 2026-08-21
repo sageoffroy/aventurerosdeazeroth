@@ -1,205 +1,230 @@
 # SpellDraft — Registro de auditoría de hechizos
 
-Este archivo es el registro humano de decisiones, cambios y estado de prueba de los hechizos de **Aventureros de Azeroth**.
+Este archivo registra decisiones, implementación y estado de validación de **Aventureros de Azeroth** durante la auditoría clase por clase.
 
-La fuente técnica sigue siendo el código/JSON correspondiente; este documento explica **qué decidimos y por qué**, para no perder contexto durante la auditoría clase por clase.
+La fuente técnica sigue siendo el código/JSON correspondiente. Este documento conserva el criterio humano para no volver a discutir decisiones ya cerradas.
 
 ## Estados
 
 - **APROBADO**: diseño + implementación + prueba en juego cerrados.
-- **REVISANDO**: decisión tomada o implementación hecha, pero falta validación final en juego.
+- **REVISANDO**: diseño/implementación avanzados; falta validación final o existe un bug conocido.
 - **PENDIENTE**: todavía no auditado.
-- **STANDBY**: se investigó, pero se pospone para no bloquear la auditoría.
-- **FUERA**: no debe aparecer como carta independiente.
+- **STANDBY**: investigado pero pospuesto para no bloquear la clase.
+- **FUERA**: no debe aparecer como elección independiente.
+
+## Modalidad de trabajo actual
+
+Mientras no haya acceso al juego se continúa el Mago sin pruebas manuales: inventario, decisiones, compatibilidad técnica y código. Todo lo nuevo permanece **REVISANDO** hasta una única pasada integral del Mago en juego. Después de esa pasada se corrigen los defectos juntos y recién entonces se abre la siguiente clase.
 
 ---
 
 # Mago
 
-## Contador funcional del pool auditado
+## Contador funcional del pool
 
-El contador principal mide **elecciones/cartas del draft**, no la cantidad de hechizos internos que una carta paquete puede enseñar. Así una carta como `Resguardo Elemental` cuenta una sola vez para medir la composición real del pool.
+El contador mide **elecciones/cartas reales del draft**, no hechizos internos enseñados por paquetes.
 
-Categorías primarias:
+| Categoría | Cantidad |
+| --- | ---: |
+| Daño | 12 |
+| Sanación | 0 |
+| Defensa | 6 |
+| Soporte | 9 |
+| Utilidad/Otras | 5 |
+| **Total** | **32** |
 
-- **Daño**: función principal causar daño.
-- **Sanación**: recuperar vida.
-- **Defensa**: mitigación, absorción, armadura, resistencias o supervivencia personal.
-- **Soporte**: buffs/debuffs, mejoras de grupo, manipulación de estadísticas o recursos de combate.
-- **Utilidad/Otras**: viaje, invocaciones, creación de objetos y herramientas especiales.
+Estado actual: **7 APROBADAS + 25 REVISANDO**.
 
-### Mago — contador actual
+`18960 Teleport: Moonglade` es una regla racial/lore especial y no entra todavía en este contador. `55342 Mirror Image` permanece en STANDBY y tampoco cuenta.
 
-| Categoría | Cartas | Estado actual |
-| --- | ---: | --- |
-| Daño | 2 | `200116 Frostbolt`, `200133 Fireball` — APROBADO |
-| Sanación | 0 | — |
-| Defensa | 4 | `190002 Resguardo Elemental`, `207302 Ice Armor`, `230482 Molten Armor` — APROBADO; `206117 Mage Armor` — REVISANDO |
-| Soporte | 2 | `190003 Manipulación Mágica` — APROBADO; `201459 Intelecto Arcano` — REVISANDO |
-| Utilidad/Otras | 2 | `190001 Maestro de Portales` — APROBADO; `242955 Crear refrigerio` — REVISANDO |
-| **Total** | **10** | **7 APROBADAS + 3 REVISANDO** |
+Las categorías primarias están almacenadas también en `audit_pool.json`, para que el contador no dependa sólo de este documento.
 
-`18960 Teleport: Moonglade` es una regla especial racial/lore y no se suma todavía al contador del pool auditado. `55342 Mirror Image` está en STANDBY y tampoco se cuenta hasta retomar su auditoría.
+## Inventario completo actualmente seleccionado
 
-Este bloque debe actualizarse cada vez que una carta se aprueba, se elimina, se empaqueta o cambia de función primaria.
+### Daño — 12
 
-## APROBADO
+- `200116` Frostbolt — APROBADO
+- `200133` Fireball — APROBADO
+- `205143` Arcane Missiles — REVISANDO
+- `201449` Arcane Explosion — REVISANDO
+- `230451` Arcane Blast — REVISANDO
+- `202136` Fire Blast — REVISANDO
+- `202120` Flamestrike — REVISANDO
+- `202948` Scorch — REVISANDO
+- `244614` Frostfire Bolt — REVISANDO
+- `200010` Blizzard — REVISANDO
+- `200120` Cone of Cold — REVISANDO
+- `230455` Ice Lance — REVISANDO
 
-### 190001 — Maestro de Portales
+### Defensa — 6
 
-**Estado:** APROBADO
+- `190002` Resguardo Elemental — APROBADO
+- `207302` Ice Armor — APROBADO
+- `230482` Molten Armor — APROBADO
+- `206117` Mage Armor — REVISANDO por bugs conocidos
+- `201463` Mana Shield — REVISANDO
+- `245438` Ice Block — REVISANDO
 
-- Una sola carta reemplaza los Portales individuales de Mago.
-- Marcador pasivo visible en el libro de hechizos.
-- Enseña sólo los Portales correspondientes a la facción del personaje, más Dalaran.
-- Alianza y Horda reciben su versión correcta de Shattrath; nunca ambas.
-- Sin componentes.
-- Teleports y Portals individuales quedan fuera del pool.
-- Reglas de facción verificadas en juego.
+### Soporte — 9
 
-### 190002 — Resguardo Elemental
+- `190003` Manipulación Mágica — APROBADO
+- `201459` Arcane Intellect — REVISANDO
+- `200118` Polymorph — REVISANDO
+- `200122` Frost Nova — REVISANDO
+- `200475` Remove Curse — REVISANDO
+- `202139` Counterspell — REVISANDO
+- `212051` Evocation — REVISANDO
+- `230449` Spellsteal — REVISANDO
+- `200759` Conjure Mana Gem — REVISANDO
 
-**Estado:** APROBADO
+### Utilidad/Otras — 5
 
-- Reemplaza a Resguardo de Fuego y Resguardo de Escarcha como elecciones independientes.
-- Enseña `200543` Resguardo de Fuego y `206143` Resguardo de Escarcha.
-- Marcador pasivo/rankless.
-- Rareza temporal: Uncommon.
-- Funcionamiento confirmado en juego.
-- Pendiente sólo cosmético: icono personalizado `Spell_ElementalArmor.tga`.
-
-### 190003 — Manipulación Mágica
-
-**Estado:** APROBADO
-
-- Comprime Amplificar magia y Atenuar magia.
-- Enseña `201008` y `200604`.
-- Marcador pasivo/rankless.
-- Icono decidido: `Spell_Holy_Serendipity`, heredado de `63731 Serendipity`.
-- Rareza temporal: Uncommon.
-- Funcionamiento confirmado en juego.
-
-### 200116 — Frostbolt
-
-**Estado:** APROBADO
-
-- Hechizo de daño normalizado por el pipeline canónico.
-- Daño visible y daño real coinciden en la prueba.
-- Tiempo de casteo y ralentización funcionan correctamente.
-
-### 200133 — Fireball
-
-**Estado:** APROBADO
-
-- Hechizo de daño normalizado por el pipeline canónico.
-- Daño directo y DoT funcionan correctamente.
-- Tooltip y valores reales fueron confirmados en juego.
-
-### 207302 — Ice Armor
-
-**Estado:** APROBADO
-
-- `Frost Armor` raíz `168` queda FUERA como carta independiente.
-- `207302 Ice Armor` queda como elección defensiva rankless y usa el pipeline canónico desde nivel 1.
-- Funcionamiento verificado en juego.
-
-### 230482 — Molten Armor
-
-**Estado:** APROBADO
-
-- Queda como elección defensiva independiente rankless y usa el pipeline canónico desde nivel 1.
-- `34913` es el helper reactivo interno de Molten Armor y nunca es carta.
-- `230482` fue corregida para disparar el helper normalizado `234913`, evitando el daño nativo de nivel alto en nivel 1.
-- El tooltip fue corregido para mostrar el daño escalado del helper; a nivel 1 refleja aproximadamente 4 p. y el popup muestra el mismo valor.
-- Funcionamiento verificado en juego.
-
-### 18960 — Teleport: Moonglade
-
-**Estado:** regla técnica/lore aplicada
-
-- Usa el ID nativo `18960`, porque el destino depende de `spell_target_position` asociado al ID nativo.
-- Sólo puede aparecer para Elfos de la Noche.
+- `190001` Maestro de Portales — APROBADO
+- `242955` Conjure Refreshment — REVISANDO
+- `200130` Slow Fall — REVISANDO
+- `201953` Blink — REVISANDO
+- `200066` Invisibility — REVISANDO
 
 ---
 
-## REVISANDO
+## Decisiones cerradas / implementadas
+
+### 190001 — Maestro de Portales — APROBADO
+
+- Una sola carta reemplaza Portales individuales.
+- Marcador pasivo.
+- Enseña sólo portales de la facción correspondiente más Dalaran.
+- Nunca entrega ambas versiones de Shattrath.
+- Sin componentes.
+- Teleports/Portals individuales fuera del pool.
+
+### 190002 — Resguardo Elemental — APROBADO
+
+- Enseña `200543` Resguardo de Fuego y `206143` Resguardo de Escarcha.
+- Marcador pasivo/rankless.
+- Funcionamiento confirmado.
+- Pendiente sólo cosmético: icono personalizado.
+
+### 190003 — Manipulación Mágica — APROBADO
+
+- Enseña `201008` Amplificar magia y `200604` Atenuar magia.
+- Marcador pasivo/rankless.
+- Icono decidido: `Spell_Holy_Serendipity`.
+- Funcionamiento confirmado.
+
+### 200116 — Frostbolt — APROBADO
+
+Daño, casteo y ralentización confirmados contra tooltip/runtime.
+
+### 200133 — Fireball — APROBADO
+
+Daño directo, DoT y tooltip confirmados.
+
+### 207302 — Ice Armor — APROBADO
+
+- `Frost Armor` raíz `168` queda FUERA como carta independiente.
+- Ice Armor representa esa línea defensiva y escala desde nivel 1.
+
+### 230482 — Molten Armor — APROBADO
+
+- Helper nativo `34913` nunca es carta.
+- El runtime `230482` dispara helper normalizado `234913`.
+- Se eliminó el daño nativo de nivel alto a nivel 1.
+- Tooltip y daño real del helper quedaron alineados.
+
+### 201459 — Arcane Intellect — REVISANDO
+
+- Conserva identidad/icono/escalado de Arcane Intellect.
+- Adopta targeting de grupo/banda de Arcane Brilliance `23028`.
+- Duración fija de 1 hora.
+- Sin componente.
+- `23028` FUERA.
+- Falta validar propagación sobre otro miembro de grupo/banda en la pasada final.
+
+### 200130 — Slow Fall — REVISANDO
+
+- Continúa como carta de utilidad independiente.
+- Se elimina el requisito de `Light Feather`: una elección aleatoria del draft debe ser autosuficiente y no depender de abastecer un reactivo legado.
+- Pendiente validación final en juego.
+
+### 242955 — Conjure Refreshment — REVISANDO
+
+- Es la única carta de comida/bebida.
+- `200587` Conjure Food, `205504` Conjure Water y `43987 Ritual of Refreshment` quedan FUERA.
+- Crea `43518 Conjured Mana Pie` para todo nivel 1-80.
+- El item queda usable desde nivel 1.
+- Helpers internos:
+  - salud `61829 -> 261829`
+  - maná `61830 -> 261830`
+- Los helpers usan el mismo `custom_spell_scaling.tsv` que el resto de hechizos.
+- Anchors reproducen Mana Biscuit / Mana Pie / Mana Strudel y extrapolan hacia nivel 1 con la regla canónica.
+- Pendiente pasada final en juego.
+
+### 200759 — Conjure Mana Gem — REVISANDO
+
+Diseño implementado:
+
+- Una sola carta reemplaza la progresión de gemas por rango.
+- El runtime adopta el comportamiento de `42985` y crea/recarga un único `33312 Mana Sapphire` con 3 cargas desde nivel 1.
+- El item queda usable desde nivel 1 y su spell de uso pasa de `42987` a helper determinista `242987`.
+- El helper usa **rangos min/max**, no un promedio fijo, y se integra al mismo `custom_spell_scaling.tsv`.
+- Anchors nativos preservados:
+  - L28 `390-410`
+  - L38 `585-615`
+  - L48 `829-871`
+  - L58 `1073-1127`
+  - L68 `2340-2460`
+  - L77 `3330-3500`
+- L1 usa `39-41` por la misma regla de offset bajo nivel; L77-L80 queda plano al último rango nativo.
+- Pendiente pasada final en juego.
+
+---
+
+## Compatibilidad general descubierta durante Mago
+
+### Runtime 1-80
+
+`custom_spells.json` tenía selección de primeras filas hasta nivel 80 pero `runtime_max_level` todavía estaba en 60. Se corrigió a **80**. Esto es un arreglo global para todas las clases, no una excepción del Mago.
+
+### Herencia de SpellScript/AuraScript
+
+Los clones DBC `200000 + native_root` conservaban estructura del hechizo, pero `spell_script_names` del world DB sigue indexado por ID nativo. Por lo tanto habilidades como Arcane Blast, Arcane Missiles, Mana Shield, Frostfire Bolt, Wards, Molten Armor y Mana Gem podían perder lógica C++ aunque el DBC pareciera correcto.
+
+Se añadió una compatibilidad **general** en `SpellScriptLoader.cpp`:
+
+- para IDs `200000-299999`, el lookup de `spell_script_names` se hace contra `spellId - 200000`;
+- el script se inicializa con el ID runtime real, para que vea el `SpellInfo` normalizado;
+- los paquetes `190xxx` no participan.
+
+Así no se agregan aliases SQL spell por spell. La solución servirá automáticamente para las demás clases.
+
+### Consumibles escalables
+
+`apply_reviewed_consumable_scaling.py` se generalizó para soportar:
+
+- helpers disparados por un wrapper;
+- helpers usados directamente por un item;
+- anchors de valor fijo;
+- anchors con rango aleatorio min/max.
+
+Todos terminan en el mismo TSV/runtime canónico.
+
+---
+
+## Bugs conocidos para la pasada final
 
 ### 206117 — Mage Armor
 
-**Estado:** REVISANDO
+La habilidad funciona pero permanece REVISANDO:
 
-La habilidad funciona, pero se reabre por dos problemas detectados en juego:
+1. El efecto visual queda colgado/persistente después de desaparecer o ser sustituido.
+2. El tooltip muestra `2-1 p.` de resistencia mágica cuando el valor real observado es **1 p. fijo** a ese nivel.
 
-- El efecto visual de Armadura de mago queda **colgado/persistente** después de que debería desaparecer o ser reemplazado.
-- El tooltip muestra `Aumenta tu resistencia a toda la magia 2-1 p.`. Esto es incorrecto: el valor observado en juego es **1 p. fijo**, no un rango 2-1.
+Hay que separar el bug visual del bug de presentación numérica y corregir ambos antes de aprobarla.
 
-No se considera cerrada hasta corregir el visual persistente y mostrar el valor fijo correcto en el tooltip.
+### 201459 — Arcane Intellect
 
-Prueba directa:
-
-```text
-.learn 206117
-```
-
-### 201459 — Intelecto Arcano
-
-**Estado:** REVISANDO
-
-- Mantiene identidad, nombre, icono y escalado de Intelecto Arcano.
-- Adopta el targeting de grupo/banda de `23028 Luminosidad Arcana`.
-- Duración fija de 1 hora.
-- Sin componente.
-- `23028` queda FUERA como carta independiente.
-- 1 hora confirmada sobre el propio personaje.
-- Falta únicamente validar propagación a otro miembro de grupo/banda.
-
-Prueba directa:
-
-```text
-.learn 201459
-```
-
-### 242955 — Crear refrigerio
-
-**Estado:** REVISANDO
-
-Decisión de diseño:
-
-- Se eliminó el paquete temporal `190004 Maestro de Festines`.
-- `242955 Crear refrigerio`, normalización de la raíz nativa `42955`, es la única carta de creación de alimento/bebida del Mago.
-- `200587 Crear comida` y `205504 Crear agua` quedan FUERA como elecciones independientes.
-- `43987 Ritual of Refreshment` continúa FUERA explícitamente.
-- El hechizo crea `43518 Conjured Mana Pie / Tarta de maná mágica`.
-
-Investigación del consumible:
-
-- `43518 Tarta de maná mágica`: RequiredLevel 74; spell de uso `61828`.
-- `43523 Conjured Mana Strudel`: RequiredLevel 80; spell de uso `58648`.
-- `34062 Conjured Mana Biscuit`: RequiredLevel 65; spell de uso `44166`.
-- Los spells de uso son wrappers que disparan helpers separados de salud/maná.
-- Salud por tick: nivel 65 = `1250`, nivel 74 = `3080`, nivel 80 = `3750`.
-- Maná por tick: nivel 65 = `1200`, nivel 74 = `2140`, nivel 80 = `3200`.
-- Duración nativa: 30 s.
-- Para nivel 1 se aplicó la misma regla de extrapolación baja del pipeline canónico (`low_level_offset = 2`): salud `56` por tick y maná `54` por tick.
-
-Implementación actual:
-
-- Se mantiene **una sola Tarta de maná mágica** para todo el recorrido 1-80.
-- `item_template 43518` pasa a `RequiredLevel = 1` mediante una actualización pendiente de `db_world`.
-- El wrapper `61828` deja de disparar directamente los helpers nativos de nivel alto y pasa a disparar:
-  - `261829` — clon interno determinista de `61829` para salud.
-  - `261830` — clon interno determinista de `61830` para maná.
-- Los helpers internos no son cartas del draft.
-- Sus valores 1-80 se escriben en **el mismo `custom_spell_scaling.tsv` canónico** usado por el resto de habilidades; no existe un segundo sistema runtime.
-- Anchors exactos conservados: 1 / 65 / 74 / 80, interpolación lineal entre ellos.
-- A nivel 65 reproduce Mana Biscuit; a nivel 74 reproduce Mana Pie; a nivel 80 reproduce Mana Strudel.
-- Falta prueba en juego a nivel 1 para confirmar que la tarta se puede consumir y que la restauración real ya usa los valores bajos escalados. El tooltip dinámico a niveles superiores se revisará después si continúa mostrando el valor estático del DBC.
-
-Prueba directa del hechizo:
-
-```text
-.learn 242955
-```
+Falta confirmar propagación real a otro miembro de grupo/banda.
 
 ---
 
@@ -207,21 +232,19 @@ Prueba directa del hechizo:
 
 ### 55342 — Mirror Image
 
-**Estado:** STANDBY
-
-Se investigó el escalado de daño de las copias y sus hechizos de soporte, pero se pospuso para no bloquear la auditoría de Mago.
-
-No retomar salvo decisión explícita.
+Se investigó el escalado de las copias pero el experimento no quedó satisfactorio. No retomar hasta decisión explícita.
 
 ---
 
-## Regla de trabajo de la auditoría
+## Regla de auditoría
 
-Se audita **una clase por vez** y se aplica código inmediatamente al cerrar cada decisión relevante:
+Por cada clase:
 
-1. Inventario.
-2. Diseño.
-3. Funcionamiento/prueba.
-4. Balance.
+1. inventario completo;
+2. decisiones de diseño (queda / paquete / fuera / especial / standby);
+3. implementación técnica, prefiriendo mecanismos generales;
+4. una pasada integral en juego;
+5. correcciones finales;
+6. balance y cierre de la clase.
 
-La whitelist de auditoría sólo sirve para acelerar las pruebas; no reemplaza el catálogo completo ni sus dependencias.
+La whitelist acelera la auditoría pero no reemplaza el catálogo completo ni sus dependencias.
