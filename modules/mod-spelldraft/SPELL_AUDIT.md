@@ -20,28 +20,26 @@ La fuente técnica sigue siendo el código/JSON correspondiente; este documento 
 
 El contador principal mide **elecciones/cartas del draft**, no la cantidad de hechizos internos que una carta paquete puede enseñar. Así una carta como `Resguardo Elemental` cuenta una sola vez para medir la composición real del pool.
 
-Cada carta tiene una **categoría primaria** y puede tener etiquetas secundarias (por ejemplo control, movilidad, recurso, invocación) sin duplicar el total.
+Categorías primarias:
 
-Categorías primarias usadas durante toda la auditoría:
-
-- **Daño**: su función principal es causar daño.
-- **Sanación**: su función principal es recuperar vida.
+- **Daño**: función principal causar daño.
+- **Sanación**: recuperar vida.
 - **Defensa**: mitigación, absorción, armadura, resistencias o supervivencia personal.
 - **Soporte**: buffs/debuffs, mejoras de grupo, manipulación de estadísticas o recursos de combate.
-- **Utilidad/Otras**: viaje, invocaciones, creación de objetos, herramientas especiales y efectos que no encajan principalmente en las anteriores.
+- **Utilidad/Otras**: viaje, invocaciones, creación de objetos y herramientas especiales.
 
 ### Mago — contador actual
 
 | Categoría | Cartas | Estado actual |
 | --- | ---: | --- |
-| Daño | 2 | `200116 Frostbolt`, `200133 Fireball` — REVISANDO |
+| Daño | 2 | `200116 Frostbolt`, `200133 Fireball` — APROBADO |
 | Sanación | 0 | — |
-| Defensa | 4 | `190002 Resguardo Elemental` — APROBADO; `207302 Ice Armor`, `206117 Mage Armor`, `230482 Molten Armor` — REVISANDO |
+| Defensa | 4 | `190002 Resguardo Elemental`, `207302 Ice Armor`, `206117 Mage Armor`, `230482 Molten Armor` — APROBADO |
 | Soporte | 2 | `190003 Manipulación Mágica` — APROBADO; `201459 Intelecto Arcano` — REVISANDO |
-| Utilidad/Otras | 1 | `190001 Maestro de Portales` — APROBADO |
-| **Total** | **9** | **3 APROBADAS + 6 REVISANDO** |
+| Utilidad/Otras | 2 | `190001 Maestro de Portales` — APROBADO; `190004 Maestro de Festines` — REVISANDO |
+| **Total** | **10** | **8 APROBADAS + 2 REVISANDO** |
 
-`18960 Teleport: Moonglade` es una regla especial racial/lore y no se suma todavía al contador del pool auditado porque no forma parte de la whitelist actual. `55342 Mirror Image` está en STANDBY y tampoco se cuenta hasta retomar su auditoría.
+`18960 Teleport: Moonglade` es una regla especial racial/lore y no se suma todavía al contador del pool auditado. `55342 Mirror Image` está en STANDBY y tampoco se cuenta hasta retomar su auditoría.
 
 Este bloque debe actualizarse cada vez que una carta se aprueba, se elimina, se empaqueta o cambia de función primaria.
 
@@ -51,64 +49,70 @@ Este bloque debe actualizarse cada vez que una carta se aprueba, se elimina, se 
 
 **Estado:** APROBADO
 
-Decisión final:
-
 - Una sola carta reemplaza los Portales individuales de Mago.
-- La carta queda aprendida como **pasiva visible en el libro de hechizos**, pero no como habilidad activa.
+- Marcador pasivo visible en el libro de hechizos.
 - Enseña sólo los Portales correspondientes a la facción del personaje, más Dalaran.
 - Alianza y Horda reciben su versión correcta de Shattrath; nunca ambas.
-- Los Portales enseñados no requieren componentes.
-- Los Teleports y Portals individuales de Mago quedan fuera del pool.
-- Se conserva como icono de referencia `Portal: Stormwind` (`10059`).
-
-Reglas de facción verificadas en juego.
+- Sin componentes.
+- Teleports y Portals individuales quedan fuera del pool.
+- Reglas de facción verificadas en juego.
 
 ### 190002 — Resguardo Elemental
 
 **Estado:** APROBADO
 
-Decisión final:
-
-- Una sola carta reemplaza a **Resguardo de Fuego** y **Resguardo de Escarcha** como elecciones independientes del draft.
-- Al elegirla se aprenden las dos habilidades activas normalizadas:
-  - `200543` — Resguardo de Fuego (raíz nativa `543`).
-  - `206143` — Resguardo de Escarcha (raíz nativa `6143`).
-- La carta `190002 Resguardo Elemental` queda como marcador pasivo en el libro de hechizos; las dos habilidades enseñadas son las que se usan activamente.
-- Los resguardos individuales quedan fuera del pool como elecciones independientes porque pertenecen al `TeachMap` del paquete.
-- Rareza configurada temporalmente como **Uncommon**; se revisará en la pasada final de balance.
-
-Correcciones cerradas durante la prueba:
-
-- La UI canónica de `teaches` (`patch_client_teaches_ui.py`) se amplió para leer también `card_packages.json`, incluidos los `teaches_by_team`. Así cartas normales y paquetes usan los mismos cuadritos y tooltips.
-- La carta heredaba `Rango 1` de `Fire Ward`; `finalize_package_cards.py` elimina ese subtexto de todos los marcadores de paquete.
-- `6143 Frost Ward` entró al pipeline canónico de normalización al ampliar la cohorte hasta primer rango de nivel 22, y usa el ID determinista `206143`.
-- Prueba funcional en juego confirmada: el paquete funciona correctamente y enseña los dos resguardos.
-
-Pendiente **sólo cosmético**: se preparó el icono `Spell_ElementalArmor.tga`, pero el override visual de la carta todavía no lo toma. Esto no bloquea la aprobación funcional y se resolverá más adelante junto con los iconos personalizados.
+- Reemplaza a Resguardo de Fuego y Resguardo de Escarcha como elecciones independientes.
+- Enseña `200543` Resguardo de Fuego y `206143` Resguardo de Escarcha.
+- Marcador pasivo/rankless.
+- Rareza temporal: Uncommon.
+- Funcionamiento confirmado en juego.
+- Pendiente sólo cosmético: icono personalizado `Spell_ElementalArmor.tga`.
 
 ### 190003 — Manipulación Mágica
 
 **Estado:** APROBADO
 
-Decisión final:
+- Comprime Amplificar magia y Atenuar magia.
+- Enseña `201008` y `200604`.
+- Marcador pasivo/rankless.
+- Icono decidido: `Spell_Holy_Serendipity`, heredado de `63731 Serendipity`.
+- Rareza temporal: Uncommon.
+- Funcionamiento confirmado en juego.
 
-- Una sola carta comprime **Amplificar magia** y **Atenuar magia**.
-- Al elegirla se aprenden las dos habilidades activas normalizadas:
-  - `201008` — Amplificar magia (raíz nativa `1008`).
-  - `200604` — Atenuar magia (raíz nativa `604`).
-- Las dos habilidades dejan de aparecer como elecciones independientes del draft porque pasan a pertenecer al `TeachMap` del paquete.
-- La carta `190003 Manipulación Mágica` queda como marcador pasivo/rankless.
-- Icono decidido: `Spell_Holy_Serendipity`; se usa como fuente el spell nativo `63731 Serendipity`, que posee ese icono en WotLK. Como el marcador elimina los efectos ejecutables y reemplaza nombre/descripcion, sólo heredamos su presentación/icono.
-- Rareza temporal: **Uncommon**; se revisará junto con el balance final.
-- La UI canónica de `teaches` muestra los dos cuadritos a la derecha.
-- Prueba funcional en juego confirmada: el paquete funciona correctamente y enseña ambos hechizos.
+### 200116 — Frostbolt
+
+**Estado:** APROBADO
+
+- Hechizo de daño normalizado por el pipeline canónico.
+- Daño visible y daño real coinciden en la prueba.
+- Tiempo de casteo y ralentización funcionan correctamente.
+
+### 200133 — Fireball
+
+**Estado:** APROBADO
+
+- Hechizo de daño normalizado por el pipeline canónico.
+- Daño directo y DoT funcionan correctamente.
+- Tooltip y valores reales fueron confirmados en juego.
+
+### Armaduras de Mago
+
+**Estado:** APROBADO
+
+- `Frost Armor` raíz `168` queda FUERA como carta independiente.
+- `207302 Ice Armor`, `206117 Mage Armor` y `230482 Molten Armor` quedan como tres elecciones distintas de build.
+- Las tres son rankless y usan el pipeline canónico desde nivel 1.
+- `34913` es el helper reactivo interno de Molten Armor y nunca es carta.
+- `230482` fue corregida para disparar el helper normalizado `234913`, evitando el daño nativo de nivel alto en nivel 1.
+- El tooltip de Molten Armor fue corregido para mostrar el daño escalado del helper; a nivel 1 refleja aproximadamente 4 p. y el popup muestra el mismo valor.
+- Las tres armaduras fueron verificadas funcionalmente en juego.
 
 ### 18960 — Teleport: Moonglade
 
 **Estado:** regla técnica/lore aplicada
 
-- Debe usar el ID **nativo `18960`**, no un clon normalizado, porque el destino depende de `spell_target_position` asociado al ID nativo.
-- Sólo puede aparecer para **Elfos de la Noche**.
+- Usa el ID nativo `18960`, porque el destino depende de `spell_target_position` asociado al ID nativo.
+- Sólo puede aparecer para Elfos de la Noche.
 
 ---
 
@@ -118,23 +122,13 @@ Decisión final:
 
 **Estado:** REVISANDO
 
-Diseño decidido:
-
-- Mantener la **identidad, nombre e icono de Intelecto Arcano**.
-- Mantener su bonificación/escalado de Intelecto dentro del pipeline normal.
-- Adoptar la practicidad de **Luminosidad Arcana (`23028`)**:
-  - afecta al grupo/banda;
-  - duración de **1 hora**;
-  - sin componente.
-- `23028 Luminosidad Arcana` queda **FUERA** como carta independiente.
-
-Pruebas realizadas:
-
-- Primera prueba en juego: el aura duró **30 minutos**.
-- Causa: `CustomSpellScaling.cpp` reaplicaba al casteo la duración de `custom_spell_scaling.tsv`, que todavía conservaba los 30 minutos originales de la familia de Intelecto Arcano. Modificar sólo `Spell.dbc` no alcanzaba.
-- Corrección aplicada: la mutación revisada fija explícitamente `3600000 ms` en la columna de duración del scaling runtime de `201459`, manteniendo el escalado numérico normal intacto.
-- Segunda prueba en juego: **1 hora confirmada** sobre el propio personaje.
-- La propagación a **grupo/banda** queda pendiente de una prueba con otro jugador; técnicamente el comportamiento estructural se copia de `23028 Luminosidad Arcana`.
+- Mantiene identidad, nombre, icono y escalado de Intelecto Arcano.
+- Adopta el targeting de grupo/banda de `23028 Luminosidad Arcana`.
+- Duración fija de 1 hora.
+- Sin componente.
+- `23028` queda FUERA como carta independiente.
+- 1 hora confirmada sobre el propio personaje.
+- Falta únicamente validar propagación a otro miembro de grupo/banda.
 
 Prueba directa:
 
@@ -142,36 +136,22 @@ Prueba directa:
 .learn 201459
 ```
 
-### Armaduras de Mago
+### 190004 — Maestro de Festines
 
 **Estado:** REVISANDO
 
-Decisión de diseño:
+Diseño decidido:
 
-- `Frost Armor` raíz `168` queda **FUERA** como carta independiente.
-- Se conserva sólo `Ice Armor` raíz `7302`, normalizada como `207302`, con su propia identidad y mecánicas de Ice Armor pero escalada por el pipeline canónico desde nivel 1 hasta el máximo runtime configurado.
-- `Mage Armor` raíz `6117` queda como elección independiente normalizada `206117`, escalada desde nivel 1 hasta el máximo runtime configurado.
-- `Molten Armor` raíz `30482` queda como elección independiente normalizada `230482`, escalada desde nivel 1 hasta el máximo runtime configurado.
-- `34913` es parte interna/reactiva de Molten Armor y queda marcado `internal.never`; no es una carta del draft.
-- No se crea ningún paquete para estas tres armaduras: son tres elecciones distintas de build.
-- La whitelist de auditoría contiene solamente `207302`, `206117` y `230482` para este bloque.
-
-Prueba funcional:
-
-- Las tres armaduras se aprendieron y activaron correctamente en juego.
-- `Ice Armor` mostró valores bajos apropiados para nivel 1 en sus magnitudes escalables; el `30%` de ralentización y `25%` de reducción de velocidad de ataque son mecánicas fijas de la habilidad.
-- `Molten Armor` reveló que su daño reactivo seguía disparando el helper nativo `34913`, cuyo valor de rango alto era demasiado fuerte para nivel 1.
-- Corrección aplicada: `230482` redirige su trigger interno hacia el helper normalizado `234913`, manteniendo `34913` fuera del pool y usando el pipeline canónico para escalar el daño reactivo por nivel.
-- Falta únicamente retestar el daño reactivo de `230482` a nivel 1 antes de aprobar las tres.
-
----
-
-## PENDIENTES DE AUDITORÍA
-
-Por ahora **no se consideran aprobados** aunque estén presentes en la whitelist de prueba:
-
-- `200116` — Frostbolt
-- `200133` — Fireball
+- Una sola carta de utilidad comprime las tres líneas de creación de alimento/bebida del Mago.
+- Enseña:
+  - `200587` — Crear comida, raíz nativa `587`.
+  - `205504` — Crear agua, raíz nativa `5504`.
+  - `242955` — Crear refrigerio, raíz nativa `42955`.
+- Marcador pasivo/rankless.
+- `43987 Ritual of Refreshment` queda FUERA explícitamente y no forma parte del paquete.
+- Rareza temporal: Uncommon.
+- Icono/fuente visual actual: `42955 Conjure Refreshment`.
+- Falta prueba en el draft real para confirmar que la carta enseña las tres habilidades.
 
 ---
 
@@ -184,13 +164,6 @@ Por ahora **no se consideran aprobados** aunque estén presentes en la whitelist
 Se investigó el escalado de daño de las copias y sus hechizos de soporte, pero se pospuso para no bloquear la auditoría de Mago.
 
 No retomar salvo decisión explícita.
-
----
-
-## Decisiones de diseño futuras ya acordadas
-
-- **Maestro de Festines**: comprimir `Conjure Food + Conjure Water + Conjure Refreshment` en una sola carta/paquete.
-- `43987 Ritual of Refreshment`: **FUERA**.
 
 ---
 
