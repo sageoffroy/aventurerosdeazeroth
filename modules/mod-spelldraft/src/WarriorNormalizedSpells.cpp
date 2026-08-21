@@ -5,6 +5,7 @@
 #include "SpellAuraEffects.h"
 #include "SpellInfo.h"
 #include "SpellScript.h"
+#include "SpellScriptLoader.h"
 #include "ThreatManager.h"
 
 #include <algorithm>
