@@ -39,3 +39,17 @@ WHERE `spell_id` = 201464
 
 INSERT INTO `spell_script_names` (`spell_id`, `ScriptName`)
 VALUES (201464, 'spell_warr_slam');
+
+-- AP coefficients in spell_bonus_data are also keyed by exact native IDs.
+-- These four Warrior coefficients are invariant across their native rank
+-- families, so copying them to the rankless runtime IDs preserves the WotLK
+-- formula without introducing another interpolation path.
+DELETE FROM `spell_bonus_data`
+WHERE `entry` IN (206343, 206572, 257755, 264382);
+
+INSERT INTO `spell_bonus_data`
+(`entry`, `direct_bonus`, `dot_bonus`, `ap_bonus`, `ap_dot_bonus`, `comments`) VALUES
+(206343, 0, 0, 0.12, 0, 'Aventureros normalized Warrior - Thunder Clap'),
+(206572, 0, 0, 0.31, 0, 'Aventureros normalized Warrior - Revenge'),
+(257755, 0, 0, 0.50, 0, 'Aventureros normalized Warrior - Heroic Throw'),
+(264382, 0, 0, 0.50, 0, 'Aventureros normalized Warrior - Shattering Throw');
