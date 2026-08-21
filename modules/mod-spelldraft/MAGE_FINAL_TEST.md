@@ -41,7 +41,7 @@ Comprobar por habilidad: tooltip vs daño real, coste de maná, tiempo de casteo
 
 `190002 Resguardo Elemental` debe probarse además desde el draft real porque `.learn 190002` no valida el TeachMap del paquete.
 
-Comprobar reemplazo mutuo de armaduras, absorciones, duración y cancelación visual. En `206117 Mage Armor` revisar específicamente los dos bugs abiertos: efecto visual persistente y tooltip `2-1` en vez de valor fijo.
+Comprobar reemplazo mutuo de armaduras, absorciones, duración y cancelación visual. En `206117 Armadura de mago` revisar específicamente los dos bugs abiertos: efecto visual persistente y tooltip `2-1` en vez de valor fijo.
 
 ## Bloque C — soporte/control
 
@@ -60,9 +60,11 @@ Comprobar reemplazo mutuo de armaduras, absorciones, duración y cancelación vi
 
 `190003 Manipulación Mágica` debe validarse también desde el draft real.
 
-Comprobar Polymorph/DR y ruptura por daño, Frost Nova y root, Remove Curse, interrupción de Counterspell, canal completo de Evocation, robo real de buff con Spellsteal y creación/recarga de Mana Sapphire con `200759`.
+Comprobar Polimorfia/DR y ruptura por daño, Nova de Escarcha y root, Eliminar Maldición, interrupción de Contrahechizo, canal completo de Evocación, robo real de buff con Robar hechizo y creación/recarga de la gema de maná con `200759`.
 
-Para `201459 Arcane Intellect`, formar grupo con otro personaje y confirmar propagación a grupo/banda además de la duración de 1 hora.
+**Polimorfia:** `200118` debe transformar únicamente en oveja. Las variantes tortuga, cerdo, gato, conejo, pavo, etc. son puramente cosméticas y nunca se enseñan como cartas/habilidades separadas. Los glifos u otros sistemas visuales pueden cambiar el aspecto sin alterar la elección del draft.
+
+Para `201459 Intelecto Arcano`, formar grupo con otro personaje y confirmar propagación a grupo/banda además de la duración de 1 hora.
 
 ## Bloque D — utilidad
 
@@ -75,16 +77,17 @@ Para `201459 Arcane Intellect`, formar grupo con otro personaje y confirmar prop
 
 `190001 Maestro de Portales` se prueba únicamente desde el draft real para validar facción/TeachMap.
 
-Comprobar Slow Fall sin Light Feather, Blink y limpieza de roots/stuns, Invisibility y cancelación esperada, y Conjure Refreshment con comida usable desde nivel 1 y recuperación escalada.
+Comprobar Caída Lenta sin Pluma ligera, Traslación y limpieza de roots/stuns, Invisibilidad y cancelación esperada, y Crear refrigerio con comida usable desde nivel 1 y recuperación escalada.
 
 ## Casos especiales
 
 - `55342 Mirror Image`: STANDBY; no probar salvo que se reabra explícitamente.
 - `18960 Teleport: Moonglade`: regla racial/lore separada; sólo Elfo de la Noche.
-- `Frost Armor 168`: fuera; Ice Armor representa esa línea.
+- `Frost Armor 168`: fuera; Armadura de Hielo representa esa línea.
 - `Conjure Food 587`, `Conjure Water 5504`, `Ritual of Refreshment 43987`: fuera.
-- Arcane Brilliance `23028`: fuera; Arcane Intellect absorbe su targeting grupal.
+- `Arcane Brilliance 23028`: fuera; Intelecto Arcano absorbe su targeting grupal.
 - Helpers internos (`234913`, `242987`, `261829`, `261830`): nunca son cartas.
+- Regla general del proyecto: una variante que sólo cambia apariencia/modelo/forma y no la mecánica nunca ocupa una elección adicional del draft.
 
 ## Criterio de cierre
 
