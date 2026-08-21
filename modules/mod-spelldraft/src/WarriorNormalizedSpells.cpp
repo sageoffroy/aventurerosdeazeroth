@@ -8,7 +8,9 @@
 namespace
 {
 constexpr uint32 SPELLDRAFT_HEROIC_STRIKE = 200078;
+constexpr uint32 SPELLDRAFT_REND = 200772;
 constexpr uint8 HEROIC_STRIKE_DAZED_MIN_LEVEL = 66;
+constexpr uint8 REND_HIGH_HEALTH_BONUS_MIN_LEVEL = 71;
 constexpr uint32 ICON_GENERIC_DAZE = 15;
 constexpr uint32 SPELL_GENERIC_AFTERMATH = 18118;
 
@@ -134,9 +136,63 @@ class spell_spelldraft_warr_heroic_strike : public SpellScript
         OnHit += SpellHitFn(spell_spelldraft_warr_heroic_strike::HandleOnHit);
     }
 };
+
+class spell_spelldraft_warr_rend : public AuraScript
+{
+    PrepareAuraScript(spell_spelldraft_warr_rend);
+
+    bool Load() override
+    {
+        return GetSpellInfo()->Id == SPELLDRAFT_REND && GetCaster();
+    }
+
+    void CalculateAmount(AuraEffect const* aurEff, int32& amount, bool& canBeRecalculated)
+    {
+        Unit* caster = GetCaster();
+        if (!caster)
+            return;
+
+        canBeRecalculated = false;
+
+        // Preserve AzerothCore's WotLK Rend formula exactly:
+        // 0.2 * (average main-hand base damage + AP / 14 * weapon speed)
+        // is added to EACH of the five 3-second ticks.
+        float ap = caster->GetTotalAttackPowerValue(BASE_ATTACK);
+        int32 mws = caster->GetAttackTime(BASE_ATTACK);
+        float mwbMin = 0.f;
+        float mwbMax = 0.f;
+        for (uint8 index = 0; index < MAX_ITEM_PROTO_DAMAGES; ++index)
+        {
+            mwbMin += caster->GetWeaponDamageRange(BASE_ATTACK, MINDAMAGE, index);
+            mwbMax += caster->GetWeaponDamageRange(BASE_ATTACK, MAXDAMAGE, index);
+        }
+
+        float mwb = ((mwbMin + mwbMax) / 2 + ap * mws / 14000) * 0.2f;
+        amount += int32(caster->ApplyEffectModifiers(GetSpellInfo(), aurEff->GetEffIndex(), mwb));
+
+        // Native AzerothCore checks GetRank() >= 9, which corresponds to the
+        // level-71 and level-76 ranks. The normalized spell is rankless, so use
+        // the equivalent player-level breakpoint and preserve the 35% value.
+        if (caster->GetLevel() >= REND_HIGH_HEALTH_BONUS_MIN_LEVEL
+            && GetUnitOwner()->HasAuraState(AURA_STATE_HEALTH_ABOVE_75_PERCENT, GetSpellInfo(), caster))
+        {
+            AddPct(amount, 35);
+        }
+    }
+
+    void Register() override
+    {
+        DoEffectCalcAmount += AuraEffectCalcAmountFn(
+            spell_spelldraft_warr_rend::CalculateAmount,
+            EFFECT_0,
+            SPELL_AURA_PERIODIC_DAMAGE
+        );
+    }
+};
 }
 
 void AddSpellDraftWarriorScripts()
 {
     RegisterSpellScript(spell_spelldraft_warr_heroic_strike);
+    RegisterSpellScript(spell_spelldraft_warr_rend);
 }
