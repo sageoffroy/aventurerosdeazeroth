@@ -1,8 +1,8 @@
--- Aventureros de Azeroth - safe chat commands for progression.
+-- Aventureros de Azeroth - temporary progression commands.
 --
--- AzerothCore reserves both '.' and '!' as native command prefixes, so Lua
--- chat commands must not use them.  Keep these temporary test/admin commands
--- on '#talentos' while the progression UI is being validated.
+-- AzerothCore routes '.' and '!' commands through ALE's
+-- PLAYER_EVENT_ON_COMMAND hook before reporting an unknown command. Use that
+-- real command path instead of pretending ordinary chat is a command.
 
 local CLASS_ADVENTURER = 10
 
@@ -14,12 +14,8 @@ local function isAdventurer(player)
     return player and player:GetClass() == CLASS_ADVENTURER and not isBot(player)
 end
 
-local function normalize(msg)
-    msg = (msg or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    if msg:sub(1, 1) == "#" then
-        msg = msg:sub(2)
-    end
-    return msg
+local function normalize(command)
+    return (command or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
 local function showShop(player)
@@ -54,16 +50,16 @@ local function showShop(player)
     end
 
     player:SendBroadcastMessage(
-        "[Metaprogresión] Comprar: #talentos comprar <id>"
+        "[Metaprogresión] Comprar: .talentos comprar <id>"
     )
 end
 
-local function handleChat(_, player, msg)
-    if not isAdventurer(player) or not msg then
+local function handleCommand(_, player, command, _)
+    if not player or not isAdventurer(player) or not command then
         return
     end
 
-    local cmd = normalize(msg)
+    local cmd = normalize(command)
 
     if cmd == "talentos" then
         showShop(player)
@@ -128,7 +124,6 @@ local function handleChat(_, player, msg)
     end
 end
 
-RegisterPlayerEvent(18, handleChat)
-RegisterPlayerEvent(19, handleChat)
+RegisterPlayerEvent(42, handleCommand)
 
-print("[Aventureros de Azeroth] Safe progression commands loaded: #talentos")
+print("[Aventureros de Azeroth] Progression command hook loaded: .talentos")
