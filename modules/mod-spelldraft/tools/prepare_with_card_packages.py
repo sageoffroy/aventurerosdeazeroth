@@ -70,8 +70,8 @@ def main() -> None:
 
     # spell_threat lives in the world DB rather than Spell.dbc. Rankless custom
     # IDs therefore need their own level-aware flat-threat curve. Generate it
-    # from the same native families and fail immediately if any explicit native
-    # threat anchor does not round-trip exactly.
+    # only for the class currently audited and fail if any native anchor does
+    # not round-trip exactly.
     run(
         sys.executable,
         str(TOOLS_DIR / "generate_custom_spell_threat_scaling.py"),
@@ -85,6 +85,8 @@ def main() -> None:
         str(spell_threat_sql),
         "--output",
         str(threat_scaling),
+        "--class-name",
+        "WARRIOR",
         "--max-level",
         "80",
         "--low-level-offset",
@@ -103,6 +105,8 @@ def main() -> None:
         str(spell_threat_sql),
         "--scaling",
         str(threat_scaling),
+        "--class-name",
+        "WARRIOR",
     )
 
     run(
