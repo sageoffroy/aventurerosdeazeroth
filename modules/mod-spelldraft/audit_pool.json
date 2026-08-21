@@ -1,7 +1,7 @@
 {
   "version": 1,
   "enabled": true,
-  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. Mage now contains the full WotLK trainer-spell inventory selected for review. Primary category counts choices/cards, never internal package teaches. Seven cards are approved; all remaining Mage choices stay reviewing until the final in-game pass. Mirror Image remains STANDBY and Teleport: Moonglade remains a separate racial/lore rule.",
+  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. Mage contains the full WotLK trainer-spell inventory selected for review. Warrior audit has started with the three stance package cards and normalized Heroic Strike. Primary category counts choices/cards, never internal package teaches. Mage choices retain their prior status; new Warrior choices remain reviewing until the final in-game pass.",
   "spells": [
     { "id": 190001, "name": "Maestro de Portales", "status": "approved", "category": "utility" },
     { "id": 190002, "name": "Resguardo Elemental", "status": "approved", "category": "defense" },
@@ -9,6 +9,8 @@
 
     { "id": 200010, "name": "Blizzard", "status": "reviewing", "category": "damage" },
     { "id": 200066, "name": "Invisibility", "status": "reviewing", "category": "utility" },
+    { "id": 200071, "name": "Defensive Stance", "status": "reviewing", "category": "defense" },
+    { "id": 200078, "name": "Heroic Strike", "status": "reviewing", "category": "damage" },
     { "id": 200118, "name": "Polymorph", "status": "reviewing", "category": "support" },
     { "id": 200120, "name": "Cone of Cold", "status": "reviewing", "category": "damage" },
     { "id": 200122, "name": "Frost Nova", "status": "reviewing", "category": "support" },
@@ -26,6 +28,8 @@
     { "id": 202120, "name": "Flamestrike", "status": "reviewing", "category": "damage" },
     { "id": 202136, "name": "Fire Blast", "status": "reviewing", "category": "damage" },
     { "id": 202139, "name": "Counterspell", "status": "reviewing", "category": "support" },
+    { "id": 202457, "name": "Battle Stance", "status": "reviewing", "category": "utility" },
+    { "id": 202458, "name": "Berserker Stance", "status": "reviewing", "category": "utility" },
     { "id": 202948, "name": "Scorch", "status": "reviewing", "category": "damage" },
 
     { "id": 205143, "name": "Arcane Missiles", "status": "reviewing", "category": "damage" },
