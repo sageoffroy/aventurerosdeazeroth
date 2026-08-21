@@ -4,6 +4,7 @@ void AddSpellDraftScripts();
 void AddSpellDraftCharacterStateScripts();
 void AddAdventurerClassScripts();
 void AddAdventurerComboPointsScripts();
+void AddSpellDraftWarriorScripts();
 
 void Addmod_spelldraftScripts()
 {
@@ -12,4 +13,5 @@ void Addmod_spelldraftScripts()
     AddSpellDraftCharacterStateScripts();
     AddAdventurerClassScripts();
     AddAdventurerComboPointsScripts();
+    AddSpellDraftWarriorScripts();
 }
