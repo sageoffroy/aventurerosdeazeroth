@@ -1,0 +1,61 @@
+name: One-shot progression protocol bridge
+
+on:
+  push:
+    branches:
+      - agent/progression-protocol-bridge
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/progression-protocol-bridge
+      - name: Add talent protocol delegation
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("modules/mod-spelldraft/lua/SpellDraft/draft.lua")
+          text = path.read_text(encoding="utf-8")
+
+          old = '''    msg = msg:gsub("%s+$", "")
+    if msg:sub(1, 2) ~= "SC" then
+        return
+    end
+'''
+          new = '''    if AventurerosTalentDraft
+        and AventurerosTalentDraft.HandleProtocolMessage(player, msg) then
+        return false
+    end
+
+    msg = msg:gsub("%s+$", "")
+    if msg:sub(1, 2) ~= "SC" then
+        return
+    end
+'''
+
+          if new in text:
+              print("Talent protocol delegation already present.")
+          else:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one protocol entry block, found {count}")
+              path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+      - name: Commit bridge
+        run: |
+          if git diff --quiet -- modules/mod-spelldraft/lua/SpellDraft/draft.lua; then
+            echo "No source change required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add modules/mod-spelldraft/lua/SpellDraft/draft.lua
+          git commit -m "Delegate talent draft protocol before SpellDraft"
+          git push origin HEAD:agent/progression-protocol-bridge
