@@ -40,6 +40,16 @@ WHERE `spell_id` = 201464
 INSERT INTO `spell_script_names` (`spell_id`, `ScriptName`)
 VALUES (201464, 'spell_warr_slam');
 
+-- Execute has a rank-specific DamageMultiplier for extra Rage. The normalized
+-- script replaces the native family script so the base effect curve and the
+-- damage-per-extra-Rage curve both follow the player's level.
+DELETE FROM `spell_script_names`
+WHERE `spell_id` = 205308
+  AND `ScriptName` IN ('spell_warr_execute', 'spell_spelldraft_warr_execute');
+
+INSERT INTO `spell_script_names` (`spell_id`, `ScriptName`)
+VALUES (205308, 'spell_spelldraft_warr_execute');
+
 -- AP coefficients in spell_bonus_data are also keyed by exact native IDs.
 -- These four Warrior coefficients are invariant across their native rank
 -- families, so copying them to the rankless runtime IDs preserves the WotLK
