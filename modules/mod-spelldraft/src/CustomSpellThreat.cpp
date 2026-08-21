@@ -12,13 +12,6 @@
 #include <utility>
 #include <vector>
 
-// The resolver slot lives in core Spell.cpp. Core callers therefore never take
-// a direct link dependency on mod-spelldraft; enabling this module only installs
-// the callback after the generated level table loads successfully.
-using AventurerosCustomSpellThreatResolver = bool (*)(
-    Player const*, uint32, int32&, float&, float&);
-void SetAventurerosCustomSpellThreatResolver(AventurerosCustomSpellThreatResolver resolver);
-
 namespace
 {
 struct ThreatRule
@@ -178,23 +171,18 @@ bool LoadThreatScalingFile(std::string const& path)
     return true;
 }
 
-bool ResolveCustomThreat(
-    Player const* player,
-    uint32 spellId,
-    int32& flatMod,
-    float& pctMod,
-    float& apPctMod)
+ThreatRule const* FindThreatRule(Player const* player, uint32 spellId)
 {
     if (!g_customThreatEnabled || !player)
-        return false;
+        return nullptr;
 
     auto const spellItr = g_customThreat.find(spellId);
     if (spellItr == g_customThreat.end())
-        return false;
+        return nullptr;
 
     SpellThreatLevels const& levels = spellItr->second;
     if (levels.size() <= 1)
-        return false;
+        return nullptr;
 
     uint32 level = player->GetLevel();
     if (level >= levels.size())
@@ -203,19 +191,12 @@ bool ResolveCustomThreat(
         level = 1;
 
     ThreatRule const& rule = levels[level];
-    if (!rule.present)
-        return false;
-
-    flatMod = rule.flatMod;
-    pctMod = rule.pctMod;
-    apPctMod = rule.apPctMod;
-    return true;
+    return rule.present ? &rule : nullptr;
 }
 }
 
 void ConfigureCustomSpellThreat(bool enabled)
 {
-    SetAventurerosCustomSpellThreatResolver(nullptr);
     g_customThreatEnabled = false;
     g_customThreat.clear();
 
@@ -233,5 +214,21 @@ void ConfigureCustomSpellThreat(bool enabled)
         return;
 
     g_customThreatEnabled = true;
-    SetAventurerosCustomSpellThreatResolver(ResolveCustomThreat);
+}
+
+bool GetCustomSpellThreatRule(
+    Player const* player,
+    uint32 spellId,
+    int32& flatMod,
+    float& pctMod,
+    float& apPctMod)
+{
+    ThreatRule const* rule = FindThreatRule(player, spellId);
+    if (!rule)
+        return false;
+
+    flatMod = rule->flatMod;
+    pctMod = rule->pctMod;
+    apPctMod = rule->apPctMod;
+    return true;
 }
