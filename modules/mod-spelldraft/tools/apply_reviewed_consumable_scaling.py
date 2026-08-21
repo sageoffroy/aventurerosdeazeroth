@@ -2,9 +2,18 @@
 """Apply reviewed level-scaling to internal consumable helper spells.
 
 This stage does not introduce a second runtime scaling system. It creates
-internal 200000+native helper clones, rewires the reviewed item-use wrapper to
-those clones, and appends their per-level rows to the same canonical
-custom_spell_scaling.tsv consumed by CustomSpellScaling.cpp.
+internal 200000+native helper clones and appends their per-level rows to the
+same canonical custom_spell_scaling.tsv consumed by CustomSpellScaling.cpp.
+
+A consumable can use those helpers in either of two forms:
+- wrapper -> helper: the item's native use spell triggers one or more helpers
+  (for example Conjured Mana Pie health + mana auras); or
+- direct helper: the item casts the scaling helper itself (for example a mana
+  gem's instant mana restore). In the latter case the world item_template is
+  pointed at the deterministic runtime helper by a normal pending world SQL.
+
+Anchors may be fixed amounts or native min/max ranges. Runtime randomness stays
+owned by the canonical CustomSpellScaling.cpp path just like normal spells.
 """
 
 from __future__ import annotations
@@ -13,6 +22,7 @@ import argparse
 import json
 import math
 import struct
+from dataclasses import dataclass
 from pathlib import Path
 
 from patch_adventurer_class_dbcs import DBCError, read_dbc, set_u32, u32, write_dbc
@@ -36,6 +46,12 @@ class ConsumableScalingError(RuntimeError):
     pass
 
 
+@dataclass(frozen=True)
+class AmountRange:
+    minimum: int
+    maximum: int
+
+
 def i32(row: bytes | bytearray, field: int) -> int:
     return struct.unpack_from("<i", row, field * 4)[0]
 
@@ -53,6 +69,41 @@ def load_json(path: Path) -> dict:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ConsumableScalingError(f"cannot read {path}: {exc}") from exc
+
+
+def parse_anchor(owner: int, anchor: object, max_level: int) -> tuple[int, AmountRange]:
+    if not isinstance(anchor, dict):
+        raise ConsumableScalingError(f"mutation {owner}: invalid anchor")
+
+    level = anchor.get("level")
+    if not isinstance(level, int) or isinstance(level, bool) or not 1 <= level <= max_level:
+        raise ConsumableScalingError(f"mutation {owner}: invalid anchor level")
+
+    amount = anchor.get("amount")
+    minimum = anchor.get("min")
+    maximum = anchor.get("max")
+
+    if amount is not None:
+        if minimum is not None or maximum is not None:
+            raise ConsumableScalingError(
+                f"mutation {owner}: anchor must use amount or min/max, not both"
+            )
+        if not isinstance(amount, int) or isinstance(amount, bool) or amount < 0:
+            raise ConsumableScalingError(f"mutation {owner}: invalid anchor amount")
+        return level, AmountRange(amount, amount)
+
+    if (
+        not isinstance(minimum, int)
+        or isinstance(minimum, bool)
+        or not isinstance(maximum, int)
+        or isinstance(maximum, bool)
+        or minimum < 0
+        or maximum < minimum
+    ):
+        raise ConsumableScalingError(
+            f"mutation {owner}: anchor requires non-negative min/max with max >= min"
+        )
+    return level, AmountRange(minimum, maximum)
 
 
 def load_specs(path: Path) -> list[dict]:
@@ -77,11 +128,13 @@ def load_specs(path: Path) -> list[dict]:
         duration = spec.get("duration_ms")
         max_level = spec.get("runtime_max_level")
         helpers = spec.get("helpers")
-        if not isinstance(wrapper, int) or wrapper <= 0:
+        if wrapper is not None and (
+            not isinstance(wrapper, int) or isinstance(wrapper, bool) or wrapper <= 0
+        ):
             raise ConsumableScalingError(f"mutation {owner}: invalid wrapper_spell_id")
-        if not isinstance(duration, int) or duration <= 0:
+        if not isinstance(duration, int) or isinstance(duration, bool) or duration < 0:
             raise ConsumableScalingError(f"mutation {owner}: invalid duration_ms")
-        if not isinstance(max_level, int) or not 1 <= max_level <= 255:
+        if not isinstance(max_level, int) or isinstance(max_level, bool) or not 1 <= max_level <= 255:
             raise ConsumableScalingError(f"mutation {owner}: invalid runtime_max_level")
         if not isinstance(helpers, list) or not helpers:
             raise ConsumableScalingError(f"mutation {owner}: helpers[] is required")
@@ -94,10 +147,11 @@ def load_specs(path: Path) -> list[dict]:
             runtime_id = helper.get("runtime_spell_id")
             effect_index = helper.get("effect_index")
             anchors = helper.get("anchors")
-            if not isinstance(native_id, int) or native_id <= 0:
+            if not isinstance(native_id, int) or isinstance(native_id, bool) or native_id <= 0:
                 raise ConsumableScalingError(f"mutation {owner}: invalid native helper ID")
             if (
                 not isinstance(runtime_id, int)
+                or isinstance(runtime_id, bool)
                 or not 200000 <= runtime_id <= 299999
                 or runtime_id != 200000 + native_id
             ):
@@ -106,27 +160,20 @@ def load_specs(path: Path) -> list[dict]:
                 )
             if runtime_id in seen_runtime:
                 raise ConsumableScalingError(f"duplicate runtime helper {runtime_id}")
-            if not isinstance(effect_index, int) or effect_index not in (0, 1, 2):
+            if not isinstance(effect_index, int) or isinstance(effect_index, bool) or effect_index not in (0, 1, 2):
                 raise ConsumableScalingError(f"mutation {owner}: invalid helper effect_index")
             if not isinstance(anchors, list) or len(anchors) < 2:
                 raise ConsumableScalingError(f"mutation {owner}: helper needs at least two anchors")
 
-            cleaned: list[tuple[int, int]] = []
+            cleaned: list[tuple[int, AmountRange]] = []
             seen_levels: set[int] = set()
             for anchor in anchors:
-                if not isinstance(anchor, dict):
-                    raise ConsumableScalingError(f"mutation {owner}: invalid anchor")
-                level = anchor.get("level")
-                amount = anchor.get("amount")
-                if not isinstance(level, int) or not 1 <= level <= max_level:
-                    raise ConsumableScalingError(f"mutation {owner}: invalid anchor level")
-                if not isinstance(amount, int) or amount < 0:
-                    raise ConsumableScalingError(f"mutation {owner}: invalid anchor amount")
+                level, amount_range = parse_anchor(owner, anchor, max_level)
                 if level in seen_levels:
                     raise ConsumableScalingError(f"mutation {owner}: duplicate anchor level {level}")
                 seen_levels.add(level)
-                cleaned.append((level, amount))
-            cleaned.sort()
+                cleaned.append((level, amount_range))
+            cleaned.sort(key=lambda item: item[0])
             if cleaned[0][0] != 1 or cleaned[-1][0] != max_level:
                 raise ConsumableScalingError(
                     f"mutation {owner}: helper anchors must include level 1 and {max_level}"
@@ -161,8 +208,11 @@ def linear_int(a: int, b: int, t: float) -> int:
     return -int(math.floor(abs(value) + 0.5))
 
 
-def interpolate(anchors: list[tuple[int, int]], max_level: int) -> list[int]:
-    result: list[int] = []
+def interpolate(
+    anchors: list[tuple[int, AmountRange]],
+    max_level: int,
+) -> list[AmountRange]:
+    result: list[AmountRange] = []
     for level in range(1, max_level + 1):
         if level <= anchors[0][0]:
             result.append(anchors[0][1])
@@ -178,13 +228,16 @@ def interpolate(anchors: list[tuple[int, int]], max_level: int) -> list[int]:
             if left_level <= level <= right_level:
                 span = right_level - left_level
                 t = 0.0 if span == 0 else (level - left_level) / span
-                value = linear_int(left_value, right_value, t)
+                value = AmountRange(
+                    linear_int(left_value.minimum, right_value.minimum, t),
+                    linear_int(left_value.maximum, right_value.maximum, t),
+                )
                 break
         result.append(value)
     return result
 
 
-def patch_spell_dbc(path: Path, specs: list[dict]) -> dict[int, list[int]]:
+def patch_spell_dbc(path: Path, specs: list[dict]) -> dict[int, list[AmountRange]]:
     fields, record_size, records, strings, trailing = read_dbc(path)
     if fields != SPELL_FIELDS or record_size != SPELL_RECORD_SIZE:
         raise ConsumableScalingError(f"unexpected Spell.dbc layout: {fields}/{record_size}")
@@ -196,15 +249,17 @@ def patch_spell_dbc(path: Path, specs: list[dict]) -> dict[int, list[int]]:
     }
     records = [row for row in records if u32(row, SPELL_ID) not in runtime_ids]
     by_id = {u32(row, SPELL_ID): row for row in records}
-    level_values: dict[int, list[int]] = {}
+    level_values: dict[int, list[AmountRange]] = {}
 
     for spec in specs:
-        wrapper_id = int(spec["wrapper_spell_id"])
-        wrapper = by_id.get(wrapper_id)
-        if wrapper is None:
-            raise ConsumableScalingError(
-                f"mutation {spec['owner']}: wrapper spell {wrapper_id} is missing"
-            )
+        wrapper_id = spec["wrapper_spell_id"]
+        wrapper = None
+        if wrapper_id is not None:
+            wrapper = by_id.get(int(wrapper_id))
+            if wrapper is None:
+                raise ConsumableScalingError(
+                    f"mutation {spec['owner']}: wrapper spell {wrapper_id} is missing"
+                )
 
         for helper in spec["helpers"]:
             native_id = int(helper["native_spell_id"])
@@ -226,22 +281,28 @@ def patch_spell_dbc(path: Path, specs: list[dict]) -> dict[int, list[int]]:
             set_u32(clone, SPELL_LEVEL, 1)
             set_i32(clone, EFFECT_DIE_SIDES + effect_index, 0)
             set_f32(clone, EFFECT_REAL_POINTS_PER_LEVEL + effect_index, 0.0)
-            set_i32(clone, EFFECT_BASE_POINTS + effect_index, values[0])
+            level_one = values[0]
+            set_i32(
+                clone,
+                EFFECT_BASE_POINTS + effect_index,
+                int(math.floor((level_one.minimum + level_one.maximum) / 2.0 + 0.5)),
+            )
             records.append(clone)
             by_id[runtime_id] = clone
 
-            touched = 0
-            for field in EFFECT_TRIGGER_SPELL_FIELDS:
-                current = u32(wrapper, field)
-                if current == native_id:
-                    set_u32(wrapper, field, runtime_id)
-                    touched += 1
-                elif current == runtime_id:
-                    touched += 1
-            if touched == 0:
-                raise ConsumableScalingError(
-                    f"mutation {spec['owner']}: wrapper {wrapper_id} does not reference helper {native_id}"
-                )
+            if wrapper is not None:
+                touched = 0
+                for field in EFFECT_TRIGGER_SPELL_FIELDS:
+                    current = u32(wrapper, field)
+                    if current == native_id:
+                        set_u32(wrapper, field, runtime_id)
+                        touched += 1
+                    elif current == runtime_id:
+                        touched += 1
+                if touched == 0:
+                    raise ConsumableScalingError(
+                        f"mutation {spec['owner']}: wrapper {wrapper_id} does not reference helper {native_id}"
+                    )
 
     records.sort(key=lambda row: u32(row, SPELL_ID))
     write_dbc(path, fields, record_size, records, strings, trailing)
@@ -249,22 +310,20 @@ def patch_spell_dbc(path: Path, specs: list[dict]) -> dict[int, list[int]]:
     _, _, verify_rows, _, _ = read_dbc(path)
     verify = {u32(row, SPELL_ID): row for row in verify_rows}
     for spec in specs:
-        wrapper = verify[int(spec["wrapper_spell_id"])]
-        trigger_values = [u32(wrapper, field) for field in EFFECT_TRIGGER_SPELL_FIELDS]
+        wrapper_id = spec["wrapper_spell_id"]
+        trigger_values: list[int] = []
+        if wrapper_id is not None:
+            wrapper = verify[int(wrapper_id)]
+            trigger_values = [u32(wrapper, field) for field in EFFECT_TRIGGER_SPELL_FIELDS]
         for helper in spec["helpers"]:
             native_id = int(helper["native_spell_id"])
             runtime_id = int(helper["runtime_spell_id"])
-            effect_index = int(helper["effect_index"])
             clone = verify.get(runtime_id)
             if clone is None:
                 raise ConsumableScalingError(f"runtime helper {runtime_id} was not written")
-            if native_id in trigger_values or runtime_id not in trigger_values:
+            if wrapper_id is not None and (native_id in trigger_values or runtime_id not in trigger_values):
                 raise ConsumableScalingError(
                     f"wrapper remap {native_id}->{runtime_id} failed validation"
-                )
-            if i32(clone, EFFECT_BASE_POINTS + effect_index) != level_values[runtime_id][0]:
-                raise ConsumableScalingError(
-                    f"runtime helper {runtime_id} level-1 base amount failed validation"
                 )
     return level_values
 
@@ -272,7 +331,7 @@ def patch_spell_dbc(path: Path, specs: list[dict]) -> dict[int, list[int]]:
 def patch_scaling_table(
     path: Path,
     specs: list[dict],
-    level_values: dict[int, list[int]],
+    level_values: dict[int, list[AmountRange]],
 ) -> int:
     if not path.is_file():
         raise ConsumableScalingError(f"runtime scaling table not found: {path}")
@@ -308,7 +367,7 @@ def patch_scaling_table(
                 for index in range(3):
                     if index == effect_index:
                         amount = values[level - 1]
-                        fields.extend([str(amount), str(amount)])
+                        fields.extend([str(amount.minimum), str(amount.maximum)])
                     else:
                         fields.extend(["x", "x"])
                 output.append(" ".join(fields))
@@ -367,8 +426,9 @@ def main() -> None:
             f"{helper['native_spell_id']}->{helper['runtime_spell_id']}"
             for helper in spec["helpers"]
         )
+        wrapper_text = str(spec["wrapper_spell_id"]) if spec["wrapper_spell_id"] is not None else "direct-item-use"
         print(
-            f"  owner={spec['owner']} wrapper={spec['wrapper_spell_id']} "
+            f"  owner={spec['owner']} wrapper={wrapper_text} "
             f"helpers={helper_text} levels=1-{spec['runtime_max_level']} duration={spec['duration_ms']}ms"
         )
     print(f"  canonical runtime scaling rows added: {rows}")
