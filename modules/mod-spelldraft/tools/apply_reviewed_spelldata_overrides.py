@@ -85,8 +85,14 @@ def patch_spell_data(path: Path, overrides: list[dict]) -> tuple[int, int]:
         raise OverrideError(f"{path}: could not find SpellData table closing brace")
     closing = closings[-1]
 
+    prefix = text[:closing.start()]
+    stripped = prefix.rstrip()
+    trailing = prefix[len(stripped):]
+    if stripped and not stripped.endswith(","):
+        prefix = stripped + "," + trailing
+
     payload = ""
-    if closing.start() > 0 and text[closing.start() - 1] != "\n":
+    if prefix and not prefix.endswith("\n"):
         payload += "\n"
     payload += "\n  -- Aventureros reviewed metadata overrides\n"
     for entry in missing:
@@ -100,7 +106,7 @@ def patch_spell_data(path: Path, overrides: list[dict]) -> tuple[int, int]:
     if not backup.exists():
         shutil.copy2(path, backup)
 
-    path.write_text(text[:closing.start()] + payload + text[closing.start():], encoding="utf-8")
+    path.write_text(prefix + payload + text[closing.start():], encoding="utf-8")
 
     verify = path.read_text(encoding="utf-8", errors="replace")
     final_ids = {int(match.group(1)) for match in ENTRY_RE.finditer(verify)}
