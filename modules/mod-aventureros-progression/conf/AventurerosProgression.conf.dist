@@ -1,0 +1,56 @@
+[worldserver]
+
+############################################################
+# Aventureros de Azeroth - Metaprogresion
+############################################################
+
+# Honor inicial de una cuenta sin progreso previo.
+# Default: 0
+AventurerosProgression.StartingHonor = 0
+
+############################################################
+# Talentos por vida
+############################################################
+
+# Activa las elecciones de Talento (N).
+# Default: 1
+AventurerosProgression.Talents.Enable = 1
+
+# Primera eleccion de talento.
+# Default: 10
+AventurerosProgression.Talents.FirstLevel = 10
+
+# Una eleccion cada N niveles desde FirstLevel.
+# Con 2: 10, 12, 14... 80.
+# Default: 2
+AventurerosProgression.Talents.LevelsPerPick = 2
+
+# Maximo de elecciones por superviviente.
+# De 10 a 80 cada 2 niveles = 36.
+# Default: 36
+AventurerosProgression.Talents.MaxPicks = 36
+
+# Cantidad de talentos mostrados por oferta.
+# Default: 3
+AventurerosProgression.Talents.OfferSize = 3
+
+# Cada cuantos milisegundos se vuelve a comprobar si SpellDraft ya resolvio
+# una habilidad pendiente antes de abrir Talento (N).
+# Default: 1500
+AventurerosProgression.Talents.WaitRetryMs = 1500
+
+############################################################
+# Dungeon Master -> Honor de cuenta
+############################################################
+
+# Activa el adaptador de recompensas roguelike.
+# Default: 1
+AventurerosProgression.DungeonMaster.Enable = 1
+
+# Honor de cuenta por piso roguelike consolidado por Dungeon Master.
+# Default: 10
+AventurerosProgression.DungeonMaster.RoguelikeHonorPerFloor = 10
+
+# Frecuencia del chequeo de progreso persistido de Dungeon Master.
+# Default: 5
+AventurerosProgression.DungeonMaster.PollSeconds = 5
