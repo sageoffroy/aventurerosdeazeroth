@@ -58,6 +58,14 @@
       "reason": "Keep Arcane Intellect identity/icon and normalized scaling, but use Arcane Brilliance group/raid targeting and a fixed one-hour runtime duration. The explicit runtime duration is required because normalized scaling otherwise reapplies Arcane Intellect's original 30-minute duration at cast time. Arcane Brilliance is no longer a separate draft card."
     },
     {
+      "native_root": 5143,
+      "name": "Arcane Missiles",
+      "behavior_source_spell_id": 5143,
+      "normalize_trigger_spells": [7268],
+      "exclude_from_pool": [7268],
+      "reason": "Arcane Missiles is a channeled wrapper: its periodic aura triggers the separate ranked Arcane Missile damage family rooted at 7268. The normalized channel must trigger deterministic helper 207268, whose full native helper rank family is normalized automatically into the canonical 1-80 scaling table. This preserves per-missile damage scaling instead of leaving the level-1 card stuck on rank-1 helper damage. The helper remains internal and never consumes a draft choice."
+    },
+    {
       "native_root": 7302,
       "name": "Ice Armor",
       "behavior_source_spell_id": 7302,
