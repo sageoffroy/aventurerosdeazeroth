@@ -129,3 +129,20 @@ SpellDraft.Talents.OfferSize = 3
 # Honor inicial para una cuenta sin metaprogresion previa.
 # Default: 0
 SpellDraft.Talents.StartingAccountHonor = 0
+
+############################################################
+# Dungeon Master -> Honor de cuenta
+############################################################
+
+# Activa el puente que convierte progreso roguelike de Dungeon Master en Honor.
+# Default: 1
+SpellDraft.MetaProgression.DungeonMaster.Enable = 1
+
+# Honor de cuenta ganado por cada piso roguelike completado.
+# Se acredita al finalizar la run, cuando Dungeon Master persiste sus stats.
+# Default: 10
+SpellDraft.MetaProgression.RoguelikeHonorPerFloor = 10
+
+# Cada cuantos segundos se revisa si Dungeon Master persistio progreso nuevo.
+# Default: 5
+SpellDraft.MetaProgression.DungeonMaster.PollSeconds = 5
