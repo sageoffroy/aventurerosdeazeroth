@@ -1,0 +1,33 @@
+diff --git a/src/DungeonMasterMgr.cpp b/src/DungeonMasterMgr.cpp
+--- a/src/DungeonMasterMgr.cpp
++++ b/src/DungeonMasterMgr.cpp
+@@
+ void DungeonMasterMgr::FillCreatureLoot(Creature* creature, Session* session, bool isBoss)
+ {
+     if (!creature || !session) return;
+ 
+     Loot& loot = creature->loot;
+-    loot.clear();
++
++    // Aventureros: in the normal/original-inhabitants mode the creature is an
++    // actual dungeon spawn, so its native WoW loot is part of the dungeon's
++    // identity.  Do not erase it before adding Dungeon Master rewards.
++    //
++    // Roguelike currently still uses Dungeon Master's generated population, so
++    // that path keeps the original replacement behaviour until we migrate the
++    // roguelike to original inhabitants too.
++    bool preserveNativeLoot = session->RoguelikeRunId == 0;
++    if (!preserveNativeLoot)
++        loot.clear();
+@@
+-    uint32 baseGold = isBoss ? (level * 2000u) : (level * 200u);
+-    loot.gold = std::max(500u, baseGold + RandInt<uint32>(0, baseGold / 3));
++    uint32 baseGold = isBoss ? (level * 2000u) : (level * 200u);
++    uint32 dungeonMasterGold = std::max(
++        500u,
++        baseGold + RandInt<uint32>(0, baseGold / 3));
++
++    if (preserveNativeLoot)
++        loot.gold += dungeonMasterGold;
++    else
++        loot.gold = dungeonMasterGold;
