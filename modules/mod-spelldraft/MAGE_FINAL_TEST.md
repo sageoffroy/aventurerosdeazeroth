@@ -25,7 +25,16 @@ Aprender para prueba directa:
 .learn 230455
 ```
 
-Comprobar por habilidad: tooltip vs daño real, coste de maná, tiempo de casteo/canalización, duración/DoT cuando corresponda y mecánica secundaria nativa (ralentización, stacks, área, etc.). Frostbolt y Fireball ya están aprobadas; se revalidan sólo como control de regresión.
+Comprobar por habilidad: tooltip vs daño real, coste de maná, tiempo de casteo/canalización, duración/DoT cuando corresponda y mecánica secundaria nativa (ralentización, stacks, área, etc.). Descarga de Escarcha y Bola de Fuego ya están aprobadas; se revalidan sólo como control de regresión.
+
+**Misiles Arcanos `205143`:** es un caso particular porque el canal no contiene el daño; dispara cada segundo la familia interna de proyectiles raíz `7268`. La preparación normaliza esa familia como helper `207268` usando todos sus rangos nativos y el mismo `custom_spell_scaling.tsv`. En la pasada final comprobar específicamente que:
+
+1. el canal evoluciona de 3 s en el primer tramo a 5 s cuando corresponde;
+2. sale un proyectil por segundo y el número total de impactos coincide con la duración;
+3. el daño por misil aumenta con el nivel y no queda clavado en el daño del rango 1;
+4. tooltip y daño por proyectil coinciden razonablemente;
+5. cada misil conserva críticos/procs y comportamiento nativo del canal;
+6. `207268` permanece interno y nunca aparece como carta independiente.
 
 ## Bloque B — defensa
 
@@ -86,7 +95,7 @@ Comprobar Caída Lenta sin Pluma ligera, Traslación y limpieza de roots/stuns, 
 - `Frost Armor 168`: fuera; Armadura de Hielo representa esa línea.
 - `Conjure Food 587`, `Conjure Water 5504`, `Ritual of Refreshment 43987`: fuera.
 - `Arcane Brilliance 23028`: fuera; Intelecto Arcano absorbe su targeting grupal.
-- Helpers internos (`234913`, `242987`, `261829`, `261830`): nunca son cartas.
+- Helpers internos (`207268`, `234913`, `242987`, `261829`, `261830`): nunca son cartas.
 - Regla general del proyecto: una variante que sólo cambia apariencia/modelo/forma y no la mecánica nunca ocupa una elección adicional del draft.
 
 ## Criterio de cierre
