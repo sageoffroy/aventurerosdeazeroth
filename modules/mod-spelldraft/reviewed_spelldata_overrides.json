@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "description": "Explicit project metadata for valid draftable class abilities missing from the historical SpellDraft SpellData.lua source. Rarity 0 entries may be provisional during class audit and can be promoted later without changing spell eligibility.",
+  "spells": [
+    {
+      "id": 6572,
+      "rarity": 0,
+      "class": "WARRIOR",
+      "name": "Revenge",
+      "reason": "Native WotLK Warrior trainer ability, level 14, present in Warrior skill lines and audit inventory but absent from historical SpellDraft metadata."
+    },
+    {
+      "id": 57755,
+      "rarity": 0,
+      "class": "WARRIOR",
+      "name": "Heroic Throw",
+      "reason": "Native WotLK Warrior trainer ability, level 80, present in Warrior skill lines and audit inventory but absent from historical SpellDraft metadata."
+    }
+  ]
+}
