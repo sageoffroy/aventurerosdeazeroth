@@ -2,6 +2,13 @@
   "schema_version": 1,
   "mutations": [
     {
+      "native_root": 118,
+      "name": "Polymorph",
+      "behavior_source_spell_id": 118,
+      "exclude_from_pool": [28271, 28272, 61305, 61721, 61780],
+      "reason": "Keep one mechanical Polymorph choice in the classless draft. Turtle, Pig, Black Cat, Rabbit and Turkey variants are cosmetic/collection variants of the same crowd-control role and must not consume separate card slots if they are present in source data."
+    },
+    {
       "native_root": 130,
       "name": "Slow Fall",
       "behavior_source_spell_id": 130,
@@ -49,6 +56,13 @@
       "description": "Aumenta el Intelecto de todos los miembros del grupo y banda en $s1 durante $d.",
       "exclude_from_pool": [23028],
       "reason": "Keep Arcane Intellect identity/icon and normalized scaling, but use Arcane Brilliance group/raid targeting and a fixed one-hour runtime duration. The explicit runtime duration is required because normalized scaling otherwise reapplies Arcane Intellect's original 30-minute duration at cast time. Arcane Brilliance is no longer a separate draft card."
+    },
+    {
+      "native_root": 7302,
+      "name": "Ice Armor",
+      "behavior_source_spell_id": 7302,
+      "exclude_from_pool": [168],
+      "reason": "Ice Armor is the single retained choice for the Frost Armor/Ice Armor progression. Frost Armor is an inferior earlier parallel family for this draft design and must stay out even after the temporary audit whitelist is disabled."
     },
     {
       "native_root": 30482,
