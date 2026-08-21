@@ -113,6 +113,19 @@ def main() -> None:
         str(scaling),
     )
 
+    # Reviewed consumables use internal deterministic helper clones but still
+    # execute through the exact same CustomSpellScaling.cpp TSV path as every
+    # other normalized ability. This stage only wires those helpers into the
+    # reviewed item-use wrapper and appends their 1..80 rows to the canonical TSV.
+    run(
+        sys.executable,
+        str(TOOLS_DIR / "apply_reviewed_consumable_scaling.py"),
+        "--dbc-dir",
+        str(dbc_src),
+        "--scaling",
+        str(scaling),
+    )
+
     # The audit whitelist is deliberately applied only to the generated runtime
     # catalog. Source metadata and dependency entries remain intact and are
     # restored automatically by the next preparation run.
@@ -168,6 +181,7 @@ def main() -> None:
     print("Los Portales no requieren componentes; Teleports/Portals individuales quedan fuera del pool.")
     print("Teleport: Moonglade usa el ID nativo y solo es elegible para Elfos de la Noche.")
     print("Arcane Intellect conserva identidad/escalado, usa comportamiento grupal y fuerza duracion runtime de 1 hora.")
+    print("Crear refrigerio usa una unica Tarta de mana con restauracion escalada 1-80 mediante el TSV canonico.")
     print("Las cartas-paquete son marcadores sin rango visible (sin Rank 1 / Rango 1 heredado).")
     print("La UI canonica de teaches muestra tambien las habilidades de cartas-paquete.")
     print("Audit pool: si audit_pool.json esta habilitado, solo ofrece su whitelist.")
