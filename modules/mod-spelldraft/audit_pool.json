@@ -1,7 +1,7 @@
 {
   "version": 1,
   "enabled": true,
-  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. Mage contains the full WotLK trainer-spell inventory selected for review. Warrior audit has started with the three stance package cards plus normalized Heroic Strike and Rend. Primary category counts choices/cards, never internal package teaches. Mage choices retain their prior status; new Warrior choices remain reviewing until the final in-game pass.",
+  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. Mage retains its complete reviewed inventory and statuses. Warrior now contains the complete active WotLK trainer-spell inventory selected for normalization through level 80. Primary category counts real draft choices only; Charge, Taunt, Intercept and Whirlwind are taught by stance cards and never count as independent choices. All Warrior cards remain reviewing until the final integrated in-game pass.",
   "spells": [
     { "id": 190001, "name": "Maestro de Portales", "status": "approved", "category": "utility" },
     { "id": 190002, "name": "Resguardo Elemental", "status": "approved", "category": "defense" },
@@ -9,8 +9,6 @@
 
     { "id": 200010, "name": "Blizzard", "status": "reviewing", "category": "damage" },
     { "id": 200066, "name": "Invisibility", "status": "reviewing", "category": "utility" },
-    { "id": 200071, "name": "Defensive Stance", "status": "reviewing", "category": "defense" },
-    { "id": 200078, "name": "Heroic Strike", "status": "reviewing", "category": "damage" },
     { "id": 200118, "name": "Polymorph", "status": "reviewing", "category": "support" },
     { "id": 200120, "name": "Cone of Cold", "status": "reviewing", "category": "damage" },
     { "id": 200122, "name": "Frost Nova", "status": "reviewing", "category": "support" },
@@ -19,7 +17,6 @@
     { "id": 200133, "name": "Fireball", "status": "approved", "category": "damage" },
     { "id": 200475, "name": "Remove Curse", "status": "reviewing", "category": "support" },
     { "id": 200759, "name": "Conjure Mana Gem", "status": "reviewing", "category": "support" },
-    { "id": 200772, "name": "Rend", "status": "reviewing", "category": "damage" },
 
     { "id": 201449, "name": "Arcane Explosion", "status": "reviewing", "category": "damage" },
     { "id": 201459, "name": "Arcane Intellect", "status": "reviewing", "category": "support" },
@@ -29,8 +26,6 @@
     { "id": 202120, "name": "Flamestrike", "status": "reviewing", "category": "damage" },
     { "id": 202136, "name": "Fire Blast", "status": "reviewing", "category": "damage" },
     { "id": 202139, "name": "Counterspell", "status": "reviewing", "category": "support" },
-    { "id": 202457, "name": "Battle Stance", "status": "reviewing", "category": "utility" },
-    { "id": 202458, "name": "Berserker Stance", "status": "reviewing", "category": "utility" },
     { "id": 202948, "name": "Scorch", "status": "reviewing", "category": "damage" },
 
     { "id": 205143, "name": "Arcane Missiles", "status": "reviewing", "category": "damage" },
@@ -46,7 +41,43 @@
 
     { "id": 242955, "name": "Conjure Refreshment", "status": "reviewing", "category": "utility" },
     { "id": 244614, "name": "Frostfire Bolt", "status": "reviewing", "category": "damage" },
-    { "id": 245438, "name": "Ice Block", "status": "reviewing", "category": "defense" }
+    { "id": 245438, "name": "Ice Block", "status": "reviewing", "category": "defense" },
+
+    { "id": 200071, "name": "Defensive Stance", "status": "reviewing", "category": "defense" },
+    { "id": 200072, "name": "Shield Bash", "status": "reviewing", "category": "support" },
+    { "id": 200078, "name": "Heroic Strike", "status": "reviewing", "category": "damage" },
+    { "id": 200469, "name": "Commanding Shout", "status": "reviewing", "category": "support" },
+    { "id": 200676, "name": "Disarm", "status": "reviewing", "category": "support" },
+    { "id": 200694, "name": "Mocking Blow", "status": "reviewing", "category": "support" },
+    { "id": 200772, "name": "Rend", "status": "reviewing", "category": "damage" },
+    { "id": 200845, "name": "Cleave", "status": "reviewing", "category": "damage" },
+    { "id": 200871, "name": "Shield Wall", "status": "reviewing", "category": "defense" },
+    { "id": 201160, "name": "Demoralizing Shout", "status": "reviewing", "category": "support" },
+    { "id": 201161, "name": "Challenging Shout", "status": "reviewing", "category": "support" },
+    { "id": 201464, "name": "Slam", "status": "reviewing", "category": "damage" },
+    { "id": 201715, "name": "Hamstring", "status": "reviewing", "category": "support" },
+    { "id": 201719, "name": "Recklessness", "status": "reviewing", "category": "damage" },
+    { "id": 202457, "name": "Battle Stance", "status": "reviewing", "category": "utility" },
+    { "id": 202458, "name": "Berserker Stance", "status": "reviewing", "category": "utility" },
+    { "id": 202565, "name": "Shield Block", "status": "reviewing", "category": "defense" },
+    { "id": 202687, "name": "Bloodrage", "status": "reviewing", "category": "utility" },
+    { "id": 203411, "name": "Intervene", "status": "reviewing", "category": "defense" },
+    { "id": 205246, "name": "Intimidating Shout", "status": "reviewing", "category": "support" },
+    { "id": 205308, "name": "Execute", "status": "reviewing", "category": "damage" },
+    { "id": 206343, "name": "Thunder Clap", "status": "reviewing", "category": "damage" },
+    { "id": 206552, "name": "Pummel", "status": "reviewing", "category": "support" },
+    { "id": 206572, "name": "Revenge", "status": "reviewing", "category": "damage" },
+    { "id": 206673, "name": "Battle Shout", "status": "reviewing", "category": "support" },
+    { "id": 207384, "name": "Overpower", "status": "reviewing", "category": "damage" },
+    { "id": 207386, "name": "Sunder Armor", "status": "reviewing", "category": "support" },
+    { "id": 220230, "name": "Retaliation", "status": "reviewing", "category": "defense" },
+    { "id": 223920, "name": "Spell Reflection", "status": "reviewing", "category": "defense" },
+    { "id": 223922, "name": "Shield Slam", "status": "reviewing", "category": "damage" },
+    { "id": 234428, "name": "Victory Rush", "status": "reviewing", "category": "damage" },
+    { "id": 255694, "name": "Enraged Regeneration", "status": "reviewing", "category": "defense" },
+    { "id": 257755, "name": "Heroic Throw", "status": "reviewing", "category": "damage" },
+    { "id": 264382, "name": "Shattering Throw", "status": "reviewing", "category": "support" },
+    { "id": 218499, "name": "Berserker Rage", "status": "reviewing", "category": "defense" }
   ],
   "reviewed_test_ids": []
 }
