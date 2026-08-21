@@ -163,18 +163,37 @@ Prueba directa:
 
 **Estado:** REVISANDO
 
-Decisión de diseño actualizada durante la prueba:
+Decisión de diseño:
 
-- Se elimina el paquete temporal `190004 Maestro de Festines`.
-- `242955 Crear refrigerio`, normalización de la raíz nativa `42955`, pasa a ser la única carta de creación de alimento/bebida del Mago.
-- `200587 Crear comida` y `205504 Crear agua` quedan FUERA como elecciones independientes: una vez que el refrigerio recupera vida y maná, mantener las líneas separadas sólo agrega cartas redundantes.
+- Se eliminó el paquete temporal `190004 Maestro de Festines`.
+- `242955 Crear refrigerio`, normalización de la raíz nativa `42955`, es la única carta de creación de alimento/bebida del Mago.
+- `200587 Crear comida` y `205504 Crear agua` quedan FUERA como elecciones independientes.
 - `43987 Ritual of Refreshment` continúa FUERA explícitamente.
-- La prueba confirmó que el hechizo crea `43518 Conjured Mana Pie / Tarta de maná mágica`.
-- `item_template 43518`: ItemLevel 84, RequiredLevel 74, spell de uso `61828`.
-- Como referencia de nivel 80, `item_template 43523 Conjured Mana Strudel`: ItemLevel 90, RequiredLevel 80, spell de uso `58648`.
-- Problema detectado: el objeto nativo exige nivel alto y restaura valores fijos de nivel alto, por lo que no puede reutilizarse sin adaptación para una carta disponible desde nivel 1.
-- No se va a resolver bajando simplemente `RequiredLevel`: eso dejaría la restauración de nivel alto disponible a nivel 1.
-- Próximo paso técnico: inspeccionar `61828` y `58648` y la progresión nativa de refrigerios para usar esos valores como anchors de una única comida escalable por nivel, sin crear una colección paralela de comidas por rango.
+- El hechizo crea `43518 Conjured Mana Pie / Tarta de maná mágica`.
+
+Investigación del consumible:
+
+- `43518 Tarta de maná mágica`: RequiredLevel 74; spell de uso `61828`.
+- `43523 Conjured Mana Strudel`: RequiredLevel 80; spell de uso `58648`.
+- `34062 Conjured Mana Biscuit`: RequiredLevel 65; spell de uso `44166`.
+- Los spells de uso son wrappers que disparan helpers separados de salud/maná.
+- Salud por tick: nivel 65 = `1250`, nivel 74 = `3080`, nivel 80 = `3750`.
+- Maná por tick: nivel 65 = `1200`, nivel 74 = `2140`, nivel 80 = `3200`.
+- Duración nativa: 30 s.
+- Para nivel 1 se aplicó la misma regla de extrapolación baja del pipeline canónico (`low_level_offset = 2`): salud `56` por tick y maná `54` por tick.
+
+Implementación actual:
+
+- Se mantiene **una sola Tarta de maná mágica** para todo el recorrido 1-80.
+- `item_template 43518` pasa a `RequiredLevel = 1` mediante una actualización pendiente de `db_world`.
+- El wrapper `61828` deja de disparar directamente los helpers nativos de nivel alto y pasa a disparar:
+  - `261829` — clon interno determinista de `61829` para salud.
+  - `261830` — clon interno determinista de `61830` para maná.
+- Los helpers internos no son cartas del draft.
+- Sus valores 1-80 se escriben en **el mismo `custom_spell_scaling.tsv` canónico** usado por el resto de habilidades; no existe un segundo sistema runtime.
+- Anchors exactos conservados: 1 / 65 / 74 / 80, interpolación lineal entre ellos.
+- A nivel 65 reproduce Mana Biscuit; a nivel 74 reproduce Mana Pie; a nivel 80 reproduce Mana Strudel.
+- Falta prueba en juego a nivel 1 para confirmar que la tarta se puede consumir y que la restauración real ya usa los valores bajos escalados. El tooltip dinámico a niveles superiores se revisará después si continúa mostrando el valor estático del DBC.
 
 Prueba directa del hechizo:
 
