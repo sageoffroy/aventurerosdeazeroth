@@ -121,6 +121,65 @@ local function RewriteProfiledTriggerDamage(tip, spellID)
   end
 end
 
+local function ReplaceVisibleDamageRange(text, minimum, maximum)
+  minimum = tonumber(minimum)
+  maximum = tonumber(maximum)
+  if not text or not minimum or not maximum then return text, false end
+  if maximum < minimum then minimum, maximum = maximum, minimum end
+
+  local minimumText = tostring(minimum)
+  local maximumText = tostring(maximum)
+  local compactText = RangeText(minimum, maximum)
+  if not compactText then return text, false end
+
+  -- esMX/esES native descriptions usually render damage as "de N a M". A
+  -- previous formatter can leave the corrupt nested form "de N a N-M"; match
+  -- that longer form first so neither endpoint can itself remain a range.
+  local spanishText = minimum == maximum
+      and minimumText
+      or ("de " .. minimumText .. " a " .. maximumText)
+  local updated, changed = text:gsub(
+      "[dD]e%s+%d+%s+a%s+%d+%s*%-%s*%d+",
+      spanishText,
+      1
+  )
+  if changed > 0 then return updated, true end
+
+  updated, changed = text:gsub(
+      "[dD]e%s+%d+%s+a%s+%d+",
+      spanishText,
+      1
+  )
+  if changed > 0 then return updated, true end
+
+  -- English clients commonly use "N to M". Keep the localized separator while
+  -- still replacing both endpoints atomically.
+  local englishText = minimum == maximum
+      and minimumText
+      or (minimumText .. " to " .. maximumText)
+  updated, changed = text:gsub(
+      "%d+%s+to%s+%d+%s*%-%s*%d+",
+      englishText,
+      1
+  )
+  if changed > 0 then return updated, true end
+
+  updated, changed = text:gsub(
+      "%d+%s+to%s+%d+",
+      englishText,
+      1
+  )
+  if changed > 0 then return updated, true end
+
+  -- Final fallback for descriptions that already expose the range as N-M.
+  updated, changed = text:gsub(
+      "%d+%s*%-%s*%d+",
+      compactText,
+      1
+  )
+  return updated, changed > 0
+end
+
 local function RewriteProfiledDamageRanges(tip, spellID)
   local curve = SpellDraftDamageCurves and SpellDraftDamageCurves[spellID]
   if not curve or not curve.ranges then return end
@@ -129,19 +188,18 @@ local function RewriteProfiledDamageRanges(tip, spellID)
   local direct = curve.ranges[level]
   if not direct then return end
 
-  local replacements = {}
-  local directText = RangeText(direct[1], direct[2])
-  if directText then replacements[#replacements + 1] = directText end
+  local replacements = {
+    {direct[1], direct[2]},
+  }
 
   local dot = curve.dots and curve.dots[level]
   if dot then
     local dotMinimum = tonumber(dot.minimum) or tonumber(dot.total)
     local dotMaximum = tonumber(dot.maximum) or tonumber(dot.total)
-    local dotText = RangeText(dotMinimum, dotMaximum)
-    if dotText then replacements[#replacements + 1] = dotText end
+    if dotMinimum and dotMaximum then
+      replacements[#replacements + 1] = {dotMinimum, dotMaximum}
+    end
   end
-
-  if #replacements == 0 then return end
 
   local name = tip:GetName()
   if not name then return end
@@ -154,17 +212,16 @@ local function RewriteProfiledDamageRanges(tip, spellID)
     if left then
       local text = left:GetText()
       if text then
-        local changed = false
-        local updated = text:gsub("(%d+)%s*%-%s*(%d+)", function(first, second)
-          if replacementIndex > #replacements then
-            return first .. "-" .. second
-          end
-          local replacement = replacements[replacementIndex]
+        local replacement = replacements[replacementIndex]
+        local updated, changed = ReplaceVisibleDamageRange(
+            text,
+            replacement[1],
+            replacement[2]
+        )
+        if changed then
+          left:SetText(updated)
           replacementIndex = replacementIndex + 1
-          changed = true
-          return replacement
-        end)
-        if changed then left:SetText(updated) end
+        end
       end
     end
   end
@@ -254,7 +311,7 @@ def main() -> None:
 
     print("Aventureros profiled tooltip display repaired:")
     print(f"  status: {'patched' if changed else 'already patched'}")
-    print("  direct damage: final visible range comes from SpellDraftDamageCurves")
+    print("  direct damage: complete localized min/max range comes from SpellDraftDamageCurves")
     print("  triggered damage: reviewed parent auras display their normalized helper curve")
     print("  periodic total: final visible value comes from the profiled DoT curve")
     print("  cast time: profiled cast display preserved")
