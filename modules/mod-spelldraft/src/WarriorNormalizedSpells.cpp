@@ -3,6 +3,8 @@
 #include "SpellInfo.h"
 #include "SpellScript.h"
 
+#include <array>
+
 namespace
 {
 constexpr uint32 SPELLDRAFT_HEROIC_STRIKE = 200078;
@@ -10,22 +12,80 @@ constexpr uint8 HEROIC_STRIKE_DAZED_MIN_LEVEL = 66;
 constexpr uint32 ICON_GENERIC_DAZE = 15;
 constexpr uint32 SPELL_GENERIC_AFTERMATH = 18118;
 
+struct ThreatAnchor
+{
+    uint8 level;
+    int32 flatThreat;
+};
+
+constexpr std::array<ThreatAnchor, 13> HEROIC_STRIKE_THREAT_ANCHORS = {{
+    {1, 5},
+    {8, 10},
+    {16, 16},
+    {24, 22},
+    {32, 31},
+    {40, 48},
+    {48, 70},
+    {56, 92},
+    {60, 104},
+    {66, 121},
+    {70, 164},
+    {72, 224},
+    {76, 259},
+}};
+
+int32 HeroicStrikeFlatThreat(uint8 level)
+{
+    if (level <= HEROIC_STRIKE_THREAT_ANCHORS.front().level)
+        return HEROIC_STRIKE_THREAT_ANCHORS.front().flatThreat;
+    if (level >= HEROIC_STRIKE_THREAT_ANCHORS.back().level)
+        return HEROIC_STRIKE_THREAT_ANCHORS.back().flatThreat;
+
+    for (std::size_t index = 0; index + 1 < HEROIC_STRIKE_THREAT_ANCHORS.size(); ++index)
+    {
+        ThreatAnchor const& left = HEROIC_STRIKE_THREAT_ANCHORS[index];
+        ThreatAnchor const& right = HEROIC_STRIKE_THREAT_ANCHORS[index + 1];
+        if (level < left.level || level > right.level)
+            continue;
+
+        int32 span = int32(right.level) - int32(left.level);
+        int32 offset = int32(level) - int32(left.level);
+        int32 delta = right.flatThreat - left.flatThreat;
+        return left.flatThreat + (delta * offset + span / 2) / span;
+    }
+
+    return HEROIC_STRIKE_THREAT_ANCHORS.back().flatThreat;
+}
+
 class spell_spelldraft_warr_heroic_strike : public SpellScript
 {
     PrepareSpellScript(spell_spelldraft_warr_heroic_strike);
 
     bool Load() override
     {
-        Unit* caster = GetCaster();
-        return GetSpellInfo()->Id == SPELLDRAFT_HEROIC_STRIKE
-            && caster
-            && caster->GetLevel() >= HEROIC_STRIKE_DAZED_MIN_LEVEL;
+        return GetSpellInfo()->Id == SPELLDRAFT_HEROIC_STRIKE && GetCaster();
     }
 
     void HandleOnHit()
     {
+        Unit* caster = GetCaster();
         Unit* target = GetHitUnit();
-        if (!target)
+        if (!caster || !target)
+            return;
+
+        // Native Heroic Strike has a rank-specific flat threat row in
+        // spell_threat. The normalized spell is rankless, so reproduce that
+        // numeric progression continuously from the exact native anchors.
+        target->AddThreat(
+            caster,
+            float(HeroicStrikeFlatThreat(caster->GetLevel())),
+            SPELL_SCHOOL_MASK_NORMAL,
+            GetSpellInfo()
+        );
+
+        // Ranks 1-9 do not have the Dazed bonus. It starts with native rank 10
+        // at level 66, so preserve that breakpoint in the rankless spell.
+        if (caster->GetLevel() < HEROIC_STRIKE_DAZED_MIN_LEVEL)
             return;
 
         Unit::AuraEffectList const& auraEffects = target->GetAuraEffectsByType(SPELL_AURA_MOD_DECREASE_SPEED);
