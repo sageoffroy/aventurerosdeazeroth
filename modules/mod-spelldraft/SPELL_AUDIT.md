@@ -113,6 +113,22 @@ Prueba directa:
 .learn 201459
 ```
 
+### Armaduras de Mago
+
+**Estado:** REVISANDO
+
+Decisión de diseño:
+
+- `Frost Armor` raíz `168` queda **FUERA** como carta independiente.
+- Se conserva sólo `Ice Armor` raíz `7302`, normalizada como `207302`, con su propia identidad y mecánicas de Ice Armor pero escalada por el pipeline canónico desde nivel 1 hasta el máximo runtime configurado.
+- `Mage Armor` raíz `6117` queda como elección independiente normalizada `206117`, escalada desde nivel 1 hasta el máximo runtime configurado.
+- `Molten Armor` raíz `30482` queda como elección independiente normalizada `230482`, escalada desde nivel 1 hasta el máximo runtime configurado.
+- `34913` es parte interna/reactiva de Molten Armor y queda marcado `internal.never`; no es una carta del draft.
+- No se crea ningún paquete para estas tres armaduras: son tres elecciones distintas de build.
+- La whitelist de auditoría contiene solamente `207302`, `206117` y `230482` para este bloque.
+
+Falta prueba funcional en juego de las tres armaduras antes de aprobarlas.
+
 ---
 
 ## PENDIENTES DE AUDITORÍA
@@ -121,12 +137,6 @@ Por ahora **no se consideran aprobados** aunque estén presentes en la whitelist
 
 - `200116` — Frostbolt
 - `200133` — Fireball
-- `200168` — Frost Armor
-
-### Bloques de diseño pendientes
-
-- **Armaduras** (`Frost Armor`, `Ice Armor`, `Mage Armor`, `Molten Armor`): conservar como elecciones de build salvo evidencia en contrario.
-- Duplicados de `Molten Armor` requieren inspección técnica antes de decidir.
 
 ---
 
