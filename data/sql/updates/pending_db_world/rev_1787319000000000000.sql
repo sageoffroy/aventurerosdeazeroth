@@ -63,3 +63,18 @@ INSERT INTO `spell_bonus_data`
 (206572, 0, 0, 0.31, 0, 'Aventureros normalized Warrior - Revenge'),
 (257755, 0, 0, 0.50, 0, 'Aventureros normalized Warrior - Heroic Throw'),
 (264382, 0, 0, 0.50, 0, 'Aventureros normalized Warrior - Shattering Throw');
+
+-- Spell-group membership is keyed by exact spell IDs too. Copy the native
+-- Warrior roots whose buffs/debuffs participate in exclusive stacking groups.
+-- Parent groups that reference these group IDs automatically continue to work.
+DELETE FROM `spell_group`
+WHERE (`id` = 1003 AND `spell_id` = 206673)
+   OR (`id` = 1059 AND `spell_id` = 206343)
+   OR (`id` = 1062 AND `spell_id` = 201160)
+   OR (`id` = 1091 AND `spell_id` = 200469);
+
+INSERT INTO `spell_group` (`id`, `spell_id`) VALUES
+(1003, 206673), -- Battle Shout
+(1059, 206343), -- Thunder Clap attack-speed slow
+(1062, 201160), -- Demoralizing Shout attack-power reduction
+(1091, 200469); -- Commanding Shout stamina/health-buff group
