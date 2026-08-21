@@ -107,7 +107,8 @@ Decisión de diseño:
   - `201008` — Amplificar magia (raíz nativa `1008`).
   - `200604` — Atenuar magia (raíz nativa `604`).
 - Las dos habilidades dejan de aparecer como elecciones independientes del draft porque pasan a pertenecer al `TeachMap` del paquete.
-- La carta `190003 Manipulación Mágica` queda como marcador pasivo/rankless y usa `Amplify Magic (1008)` como fuente temporal de icono/presentación.
+- La carta `190003 Manipulación Mágica` queda como marcador pasivo/rankless.
+- Icono decidido: `Spell_Holy_Serendipity`; se usa como fuente el spell nativo `63731 Serendipity`, que posee ese icono en WotLK. Como el marcador elimina los efectos ejecutables y reemplaza nombre/descripcion, sólo heredamos su presentación/icono.
 - Rareza temporal: **Uncommon**; se revisará junto con el balance final.
 - La UI canónica de `teaches` debe mostrar los dos cuadritos a la derecha automáticamente, igual que Resguardo Elemental.
 
