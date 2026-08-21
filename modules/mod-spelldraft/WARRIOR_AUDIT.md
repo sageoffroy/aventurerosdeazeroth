@@ -142,3 +142,95 @@ No se pretende usar el DPS total del Adventurer como referencia de balance. En l
 3. que los valores mostrados/aplicados en niveles de anchor coinciden;
 4. que el bonus Dazed no aparece antes de 66 y sí funciona desde 66;
 5. que la amenaza adicional se aplica una sola vez por impacto.
+
+---
+
+## 200772 — Rend / Desgarrar — REVISANDO
+
+### Decisión
+
+Desgarrar conserva íntegramente la mecánica WotLK y sólo reemplaza sus diez rangos por una curva continua 1-80:
+
+- coste fijo de **10 de ira**;
+- instantáneo, GCD normal de **1.5 s**;
+- requiere arma cuerpo a cuerpo/mano principal;
+- usable en **Actitud de batalla** y **Actitud defensiva**;
+- duración fija de **15 s**;
+- **5 ticks**, uno cada **3 s**;
+- daño de sangrado físico, sin rediseñar su interacción normal con armadura/bleeds;
+- conserva la contribución dinámica de arma y poder de ataque de AzerothCore;
+- conserva el +35% si se aplica con el objetivo por encima de 75% de vida, pero sólo desde el punto donde existía en WotLK: rango 9 / nivel 71.
+
+La carta rankless usa raíz nativa `772` y runtime determinista `200772`.
+
+### Cadena oficial
+
+`772 -> 6546 -> 6547 -> 6548 -> 11572 -> 11573 -> 11574 -> 25208 -> 46845 -> 47465`.
+
+### Comparación exacta de anchors
+
+La magnitud que AzerothCore almacena para Desgarrar es el **daño base por tick**. El normalizador canónico interpola daño periódico por tick entero; el total base mostrado se deriva siempre como `tick × 5`, de modo que runtime y tooltip no pueden divergir por división/redondeo.
+
+| Rango | Spell nativo | Nivel | Tick oficial | Tick normalizado | Desv. | Total base oficial | Total normalizado | Desv. |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | `772` | 4 | 5 | 5 | 0 (0.00%) | 25 | 25 | 0 (0.00%) |
+| 2 | `6546` | 10 | 8 | 8 | 0 (0.00%) | 40 | 40 | 0 (0.00%) |
+| 3 | `6547` | 20 | 10 | 10 | 0 (0.00%) | 50 | 50 | 0 (0.00%) |
+| 4 | `6548` | 30 | 14 | 14 | 0 (0.00%) | 70 | 70 | 0 (0.00%) |
+| 5 | `11572` | 40 | 23 | 23 | 0 (0.00%) | 115 | 115 | 0 (0.00%) |
+| 6 | `11573` | 50 | 30 | 30 | 0 (0.00%) | 150 | 150 | 0 (0.00%) |
+| 7 | `11574` | 60 | 37 | 37 | 0 (0.00%) | 185 | 185 | 0 (0.00%) |
+| 8 | `25208` | 68 | 43 | 43 | 0 (0.00%) | 215 | 215 | 0 (0.00%) |
+| 9 | `46845` | 71 | 63 | 63 | 0 (0.00%) | 315 | 315 | 0 (0.00%) |
+| 10 | `47465` | 76 | 76 | 76 | 0 (0.00%) | 380 | 380 | 0 (0.00%) |
+| — | — | 80 | 76 | 76 | 0 (0.00%) | 380 | 380 | 0 (0.00%) |
+
+**Resultado de anchors:** tick base `10/10` exacto y total base derivado `10/10` exacto. Desviación máxima en anchors: **0.00%**.
+
+Como el primer rango nativo empieza en nivel 4, la regla canónica `low_level_offset = 2.0` genera el tramo previo sin inventar un rango oficial: nivel 1 parte en `3` por tick y luego interpola hasta `5` en nivel 4. Desde el último anchor de nivel 76 queda plano hasta 80.
+
+### Fórmula dinámica de arma/AP
+
+El daño base anterior no incluye la parte dinámica que AzerothCore agrega a cada tick mediante `spell_warr_rend`. Se conserva exactamente la fórmula nativa:
+
+`0.2 × ((daño base máx. MH + daño base mín. MH) / 2 + AP / 14 × velocidad base MH)`
+
+Ese componente se suma **a cada uno de los cinco ticks**, por lo que a lo largo de los 15 segundos la contribución total equivale a una vez el término interno completo. Continúa pasando por `ApplyEffectModifiers`, igual que el script nativo.
+
+### Bonus por objetivo sobre 75% de vida
+
+AzerothCore implementa esta regla dentro del AuraScript nativo mediante `GetRank() >= 9`. Eso funciona para la cadena nativa, pero no para `200772`, que es rankless.
+
+Se añadió un binding explícito `spell_spelldraft_warr_rend` para `200772` que copia la fórmula nativa y sustituye únicamente esa comprobación estructural por su equivalente semántico:
+
+- niveles **1-70**: sin bonus;
+- niveles **71-80**: si el objetivo estaba sobre 75% de vida al aplicar Desgarrar, el daño calculado recibe **+35%**;
+- el +35% se aplica después de sumar el componente de arma/AP, igual que en AzerothCore;
+- `canBeRecalculated = false` permanece, por lo que la condición se fija al aplicar el sangrado y no cambia tick a tick.
+
+No se crea una segunda curva para este 35%: es una mecánica condicional original de WotLK.
+
+### Valores que permanecen fijos
+
+Todos los rangos oficiales mantienen:
+
+- `10` de ira;
+- `15 s` de duración;
+- tick cada `3 s`;
+- casteo instantáneo;
+- GCD `1.5 s`;
+- Battle/Defensive Stance;
+- requisito de arma principal.
+
+No existe una progresión separada de `spell_threat` para la cadena de Desgarrar que haya que reconstruir como en Golpe heroico.
+
+### Validación pendiente en juego
+
+En la pasada final de Guerrero confirmar:
+
+1. cinco ticks exactos durante 15 s;
+2. coste de 10 de ira, GCD y requisitos de postura/arma;
+3. valores base exactos en niveles anchor;
+4. que el componente de arma/AP sigue aumentando el tick como en el script nativo;
+5. que el +35% no existe en nivel 68/70 y aparece desde nivel 71 sólo si el objetivo estaba por encima de 75% al aplicar;
+6. que el script normalizado se ejecuta una sola vez y no junto al `spell_warr_rend` heredado.
