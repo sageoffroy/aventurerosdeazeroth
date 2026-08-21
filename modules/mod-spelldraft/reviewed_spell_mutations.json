@@ -2,6 +2,43 @@
   "schema_version": 1,
   "mutations": [
     {
+      "native_root": 130,
+      "name": "Slow Fall",
+      "behavior_source_spell_id": 130,
+      "clear_item_requirements": true,
+      "reason": "Slow Fall stays a standalone utility card but should be self-contained in the classless draft. Remove the native Light Feather reagent requirement instead of making a random level-1 draft choice depend on stocking a legacy consumable."
+    },
+    {
+      "native_root": 759,
+      "name": "Conjure Mana Gem",
+      "behavior_source_spell_id": 42985,
+      "copy_group_behavior": true,
+      "description": "Conjura un Zafiro de maná con 3 cargas. Cada carga restaura una cantidad de maná ajustada al nivel del personaje.",
+      "consumable_scaling": {
+        "item_entry": 33312,
+        "runtime_max_level": 80,
+        "duration_ms": 0,
+        "helpers": [
+          {
+            "native_spell_id": 42987,
+            "runtime_spell_id": 242987,
+            "effect_index": 0,
+            "anchors": [
+              { "level": 1, "min": 39, "max": 41 },
+              { "level": 28, "min": 390, "max": 410 },
+              { "level": 38, "min": 585, "max": 615 },
+              { "level": 48, "min": 829, "max": 871 },
+              { "level": 58, "min": 1073, "max": 1127 },
+              { "level": 68, "min": 2340, "max": 2460 },
+              { "level": 77, "min": 3330, "max": 3500 },
+              { "level": 80, "min": 3330, "max": 3500 }
+            ]
+          }
+        ]
+      },
+      "reason": "Collapse the native Mana Gem rank progression into one rankless choice. The runtime card adopts the level-77 Mana Sapphire create/recharge behavior while the Sapphire's direct Replenish Mana spell is replaced by deterministic helper 242987. Its min/max restoration curve reproduces every WotLK gem rank, uses the same level-offset rule below the first native rank, preserves native random ranges, and stays flat from the last native rank through level 80. The helper is executed through canonical custom_spell_scaling.tsv, not a parallel scaling engine."
+    },
+    {
       "native_root": 1459,
       "name": "Arcane Intellect",
       "behavior_source_spell_id": 23028,
