@@ -1,14 +1,14 @@
 {
   "version": 1,
   "enabled": true,
-  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. The current Mage pass has portal/package cards, all three armors, Frostbolt and Fireball approved. Arcane Intellect remains under review for group propagation, and normalized Conjure Refreshment is under review while its created consumable is adapted for all levels.",
+  "description": "Temporary whitelist used while auditing SpellDraft cards class by class. The current Mage pass has portal/package cards, Ice Armor, Molten Armor, Frostbolt and Fireball approved. Mage Armor is reopened for a stuck visual effect and incorrect 2-1 resistance tooltip; Arcane Intellect remains under review for group propagation, and normalized Conjure Refreshment is under review while its created consumable is adapted for all levels.",
   "spells": [
     { "id": 190001, "name": "Maestro de Portales", "status": "approved" },
     { "id": 190002, "name": "Resguardo Elemental", "status": "approved" },
     { "id": 190003, "name": "Manipulación Mágica", "status": "approved" },
     { "id": 200116, "name": "Frostbolt", "status": "approved" },
     { "id": 200133, "name": "Fireball", "status": "approved" },
-    { "id": 206117, "name": "Mage Armor", "status": "approved" },
+    { "id": 206117, "name": "Mage Armor", "status": "reviewing" },
     { "id": 207302, "name": "Ice Armor", "status": "approved" },
     { "id": 230482, "name": "Molten Armor", "status": "approved" },
     { "id": 201459, "name": "Arcane Intellect", "status": "reviewing" },
