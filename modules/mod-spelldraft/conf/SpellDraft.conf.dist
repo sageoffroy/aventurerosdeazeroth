@@ -99,3 +99,33 @@ SpellDraft.Rarity.Uncommon = 20.0
 SpellDraft.Rarity.Rare = 7.0
 SpellDraft.Rarity.Epic = 2.5
 SpellDraft.Rarity.Legendary = 0.5
+
+############################################################
+# Talentos y metaprogresion de cuenta
+############################################################
+
+# Activa el carril de talentos separado del draft normal.
+# Default: 1
+SpellDraft.Talents.Enable = 1
+
+# Primera eleccion de talento.
+# Default: 10
+SpellDraft.Talents.FirstLevel = 10
+
+# Una nueva eleccion cada N niveles desde FirstLevel.
+# Con 2: 10, 12, 14, 16... 80.
+# Default: 2
+SpellDraft.Talents.LevelsPerPick = 2
+
+# Maximo de elecciones de talento por superviviente.
+# De nivel 10 a 80 cada 2 niveles = 36.
+# Default: 36
+SpellDraft.Talents.MaxPicks = 36
+
+# Cantidad de talentos mostrados por oferta.
+# Default: 3
+SpellDraft.Talents.OfferSize = 3
+
+# Honor inicial para una cuenta sin metaprogresion previa.
+# Default: 0
+SpellDraft.Talents.StartingAccountHonor = 0
