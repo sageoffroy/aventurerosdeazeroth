@@ -15,6 +15,12 @@ end
 
 local NativeRegisterPlayerEvent = RegisterPlayerEvent
 
+local function NormalDraftHasPriority(player)
+    return SpellDraftTalents
+        and SpellDraftTalents.GetNormalDraftsRemaining
+        and SpellDraftTalents.GetNormalDraftsRemaining(player) > 0
+end
+
 local function RegisterWrapped(eventId, callback, shots)
     local wrapped = callback
 
@@ -28,7 +34,11 @@ local function RegisterWrapped(eventId, callback, shots)
                     return false
                 end
 
-                if SpellDraftTalents.HandleProtocolMessage(player, msg) then
+                -- A normal ability draft always wins protocol ownership. This
+                -- prevents an older pending talent offer from swallowing the
+                -- SC:<id> of a newly-earned level 15/20/etc. ability draft.
+                if not NormalDraftHasPriority(player)
+                    and SpellDraftTalents.HandleProtocolMessage(player, msg) then
                     return false
                 end
             end
