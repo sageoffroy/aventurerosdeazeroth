@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate normalized threat rules against native spell_threat anchors."""
+"""Validate audited-class normalized threat against native anchors."""
 
 from __future__ import annotations
 
@@ -45,13 +45,10 @@ def parse_native(path: Path) -> dict[int, ThreatValue]:
         text = path.read_text(encoding="utf-8", errors="replace")
     except FileNotFoundError as exc:
         raise ValidateError(f"missing spell_threat SQL: {path}") from exc
-
     result: dict[int, ThreatValue] = {}
     for spell_id, flat, pct, ap_pct in THREAT_ROW_RE.findall(text):
         result[int(spell_id)] = ThreatValue(
-            0 if flat == "NULL" else int(flat),
-            float(pct),
-            float(ap_pct),
+            0 if flat == "NULL" else int(flat), float(pct), float(ap_pct)
         )
     if not result:
         raise ValidateError(f"no spell_threat rows parsed from {path}")
@@ -63,7 +60,6 @@ def parse_runtime(path: Path) -> dict[tuple[int, int], ThreatValue]:
         lines = path.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError as exc:
         raise ValidateError(f"missing normalized threat file: {path}") from exc
-
     result: dict[tuple[int, int], ThreatValue] = {}
     for line_no, raw in enumerate(lines, 1):
         raw = raw.strip()
@@ -73,14 +69,12 @@ def parse_runtime(path: Path) -> dict[tuple[int, int], ThreatValue]:
         if len(parts) != 5:
             raise ValidateError(f"{path}:{line_no}: expected 5 fields")
         try:
-            spell_id = int(parts[0])
-            level = int(parts[1])
+            key = (int(parts[0]), int(parts[1]))
             value = ThreatValue(int(parts[2]), float(parts[3]), float(parts[4]))
         except ValueError as exc:
             raise ValidateError(f"{path}:{line_no}: malformed numeric value") from exc
-        key = (spell_id, level)
         if key in result:
-            raise ValidateError(f"{path}:{line_no}: duplicate {spell_id}:{level}")
+            raise ValidateError(f"{path}:{line_no}: duplicate {key[0]}:{key[1]}")
         result[key] = value
     return result
 
@@ -101,24 +95,27 @@ def main() -> None:
     parser.add_argument("--spell-ranks", required=True, type=Path)
     parser.add_argument("--spell-threat", required=True, type=Path)
     parser.add_argument("--scaling", required=True, type=Path)
+    parser.add_argument("--class-name", required=True)
     args = parser.parse_args()
+    class_name = args.class_name.strip().upper()
 
     try:
         resolved = load_json(args.resolved.expanduser().resolve())
         spells = resolved.get("spells")
         if not isinstance(spells, list) or not spells:
             raise ValidateError("resolved registry has no spells")
+        selected = [spell for spell in spells if str(spell.get("class", "")).upper() == class_name]
+        if not selected:
+            raise ValidateError(f"resolved registry has no {class_name} spells")
 
-        _root_by_spell, ranks_by_root = parse_spell_ranks(
-            args.spell_ranks.expanduser().resolve()
-        )
+        _root_by_spell, ranks_by_root = parse_spell_ranks(args.spell_ranks.expanduser().resolve())
         levels = spell_levels(args.dbc_dir.expanduser().resolve() / "Spell.dbc")
         native = parse_native(args.spell_threat.expanduser().resolve())
         runtime = parse_runtime(args.scaling.expanduser().resolve())
 
         checked = 0
         families = 0
-        for spell in spells:
+        for spell in selected:
             custom_id = int(spell["id"])
             root = int(spell["clone_from"])
             family_has_threat = False
@@ -132,7 +129,7 @@ def main() -> None:
                 actual = runtime.get((custom_id, level))
                 if actual is None:
                     raise ValidateError(
-                        f"{custom_id} root {root}: missing runtime threat at native anchor level {level}"
+                        f"{custom_id} root {root}: missing threat at native anchor level {level}"
                     )
                 if (
                     actual.flat != expected.flat
@@ -150,13 +147,13 @@ def main() -> None:
                 families += 1
 
         if checked == 0:
-            raise ValidateError("no explicit native threat anchors were validated")
+            raise ValidateError(f"no explicit native threat anchors validated for {class_name}")
     except ValidateError as exc:
         raise SystemExit(f"Normalized threat validation failed: {exc}") from exc
 
     print(
-        f"Normalized threat validation OK: {checked} native anchors across "
-        f"{families} normalized families, max anchor deviation 0.00%"
+        f"Normalized {class_name} threat validation OK: {checked} native anchors across "
+        f"{families} families, max anchor deviation 0.00%"
     )
 
 
