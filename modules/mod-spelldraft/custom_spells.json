@@ -8,12 +8,12 @@
   "runtime_max_level": 60,
   "selection": {
     "mode": "current_spelldraft_roots",
-    "max_first_rank_level": 22,
+    "max_first_rank_level": 80,
     "exclude_classes": [
       "DEATHKNIGHT"
     ],
     "include_talents": false,
-    "description": "Normalize every currently draftable non-talent class ability whose first rank is learned at level 22 or earlier. The native rank family is kept as profile/anchor source data and is replaced by one deterministic custom card using custom_id = 200000 + native_root. This reviewed expansion from 20 to 22 brings Frost Ward into the canonical level-scaling pipeline before Resguardo Elemental can be approved."
+    "description": "Normalize every currently draftable non-talent class ability whose first rank is learned at level 80 or earlier. The native rank family is kept as profile/anchor source data and is replaced by one deterministic custom card using custom_id = 200000 + native_root. The audit whitelist still controls which cards are actually offered while class-by-class review is in progress."
   },
   "pinned": [
     {
