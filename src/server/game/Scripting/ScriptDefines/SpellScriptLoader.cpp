@@ -24,28 +24,32 @@ namespace
 // Aventureros normalized abilities use the deterministic ID rule
 //   runtime = 200000 + native root.
 //
-// spell_script_names is keyed by the native spell IDs loaded from the world
-// database. Without this compatibility bridge a DBC clone keeps its raw spell
-// behavior but silently loses AzerothCore SpellScript/AuraScript logic such as
-// Arcane Blast, Mana Shield, Arcane Missiles, Frostfire Bolt, wards, etc.
-// Resolve only the reserved normalized range; package/virtual cards (190xxx)
-// remain completely untouched.
-uint32 SpellScriptLookupId(uint32 spellId)
+// Most normalized spells should inherit spell_script_names from their native
+// root. A few native mechanics, however, are bound only to later ranks rather
+// than the family root (Heroic Strike's Dazed bonus is the first case). Those
+// spells may declare an explicit binding for the normalized runtime ID. Exact
+// runtime bindings therefore take precedence; when none exists we fall back to
+// the native root exactly as before.
+SpellScriptsBounds SpellScriptBounds(uint32 spellId)
 {
+    SpellScriptsBounds exact = sObjectMgr->GetSpellScriptsBounds(spellId);
+    if (exact.first != exact.second)
+        return exact;
+
     constexpr uint32 NORMALIZED_SPELL_MIN = 200000;
     constexpr uint32 NORMALIZED_SPELL_MAX = 299999;
     constexpr uint32 NORMALIZED_SPELL_OFFSET = 200000;
 
     if (spellId >= NORMALIZED_SPELL_MIN && spellId <= NORMALIZED_SPELL_MAX)
-        return spellId - NORMALIZED_SPELL_OFFSET;
+        return sObjectMgr->GetSpellScriptsBounds(spellId - NORMALIZED_SPELL_OFFSET);
 
-    return spellId;
+    return exact;
 }
 }
 
 void ScriptMgr::CreateSpellScripts(uint32 spellId, std::list<SpellScript*>& scriptVector)
 {
-    SpellScriptsBounds bounds = sObjectMgr->GetSpellScriptsBounds(SpellScriptLookupId(spellId));
+    SpellScriptsBounds bounds = SpellScriptBounds(spellId);
 
     for (SpellScriptsContainer::iterator itr = bounds.first; itr != bounds.second; ++itr)
     {
@@ -60,7 +64,7 @@ void ScriptMgr::CreateSpellScripts(uint32 spellId, std::list<SpellScript*>& scri
 
         // Initialize against the actual runtime ID so script validation and
         // GetSpellInfo() see the normalized DBC row while the binding itself is
-        // inherited from the native source family.
+        // inherited from the native source family or explicitly overridden.
         script->_Init(&tempScript->GetName(), spellId);
 
         scriptVector.push_back(script);
@@ -69,7 +73,7 @@ void ScriptMgr::CreateSpellScripts(uint32 spellId, std::list<SpellScript*>& scri
 
 void ScriptMgr::CreateAuraScripts(uint32 spellId, std::list<AuraScript*>& scriptVector)
 {
-    SpellScriptsBounds bounds = sObjectMgr->GetSpellScriptsBounds(SpellScriptLookupId(spellId));
+    SpellScriptsBounds bounds = SpellScriptBounds(spellId);
 
     for (SpellScriptsContainer::iterator itr = bounds.first; itr != bounds.second; ++itr)
     {
@@ -90,7 +94,7 @@ void ScriptMgr::CreateAuraScripts(uint32 spellId, std::list<AuraScript*>& script
 
 void ScriptMgr::CreateSpellScriptLoaders(uint32 spellId, std::vector<std::pair<SpellScriptLoader*, SpellScriptsContainer::iterator>>& scriptVector)
 {
-    SpellScriptsBounds bounds = sObjectMgr->GetSpellScriptsBounds(SpellScriptLookupId(spellId));
+    SpellScriptsBounds bounds = SpellScriptBounds(spellId);
     scriptVector.reserve(std::distance(bounds.first, bounds.second));
 
     for (SpellScriptsContainer::iterator itr = bounds.first; itr != bounds.second; ++itr)
