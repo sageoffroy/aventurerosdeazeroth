@@ -1166,6 +1166,11 @@ local function OnProtocolWhisper(_, player, msg, _, _, receiver)
         return
     end
 
+    if AventurerosTalentDraft
+        and AventurerosTalentDraft.HandleProtocolMessage(player, msg) then
+        return false
+    end
+
     msg = msg:gsub("%s+$", "")
     if msg:sub(1, 2) ~= "SC" then
         return
