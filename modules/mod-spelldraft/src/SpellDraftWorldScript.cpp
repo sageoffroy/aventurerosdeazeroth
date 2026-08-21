@@ -1,6 +1,7 @@
 #include "SpellDraftWorldScript.h"
 
 #include "CustomSpellScaling.h"
+#include "CustomSpellThreat.h"
 #include "Configuration/Config.h"
 #include "Log.h"
 
@@ -19,6 +20,7 @@ void SpellDraftWorldScript::OnAfterConfigLoad(bool reload)
 
     bool const enabled = SpellDraftEnabled();
     ConfigureCustomSpellScaling(enabled);
+    ConfigureCustomSpellThreat(enabled);
     LOG_INFO(
         "module.SpellDraft",
         "Aventureros de Azeroth: SpellDraft config reloaded. Enabled: {}.",
@@ -30,6 +32,7 @@ void SpellDraftWorldScript::OnStartup()
 {
     bool const enabled = SpellDraftEnabled();
     ConfigureCustomSpellScaling(enabled);
+    ConfigureCustomSpellThreat(enabled);
     LOG_INFO(
         "module.SpellDraft",
         "Aventureros de Azeroth: SpellDraft bootstrap loaded. Enabled: {}.",
