@@ -1,0 +1,18 @@
+diff --git a/src/DungeonMasterMgr.cpp b/src/DungeonMasterMgr.cpp
+--- a/src/DungeonMasterMgr.cpp
++++ b/src/DungeonMasterMgr.cpp
+@@ -2358,6 +2358,13 @@ void DungeonMasterMgr::FillCreatureLoot(Creature* creature, Session* session, bo
+     if (!creature || !session) return;
+ 
+     Loot& loot = creature->loot;
+-    loot.clear();
++
++    // Aventureros: normal mode uses the dungeon's original inhabitants.
++    // Preserve their native WoW loot and add Dungeon Master bonus drops on top.
++    // Roguelike still uses generated inhabitants for now, so it keeps the
++    // upstream replacement behavior until that mode is migrated too.
++    bool preserveNativeLoot = session->RoguelikeRunId == 0;
++    if (!preserveNativeLoot)
++        loot.clear();
+ 
+     uint8 level = session->EffectiveLevel;
