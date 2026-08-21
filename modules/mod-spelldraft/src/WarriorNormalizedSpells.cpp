@@ -1,9 +1,11 @@
+#include "CustomSpellThreat.h"
+
 #include "Player.h"
+#include "Spell.h"
 #include "SpellAuraEffects.h"
 #include "SpellInfo.h"
 #include "SpellScript.h"
-
-#include <array>
+#include "ThreatManager.h"
 
 namespace
 {
@@ -14,50 +16,70 @@ constexpr uint8 REND_HIGH_HEALTH_BONUS_MIN_LEVEL = 71;
 constexpr uint32 ICON_GENERIC_DAZE = 15;
 constexpr uint32 SPELL_GENERIC_AFTERMATH = 18118;
 
-struct ThreatAnchor
+// Native spell_threat flatMod is applied once per cast and divided by the final
+// target count. Normalized spells cannot store a player-level-dependent flatMod
+// in the static world DB, so the generated threat table owns that one numeric
+// field. pctMod/apPctMod remain normal static spell_threat data on the runtime
+// ID and are therefore still handled by AzerothCore itself.
+class spell_spelldraft_warr_flat_threat : public SpellScript
 {
-    uint8 level;
-    int32 flatThreat;
-};
+    PrepareSpellScript(spell_spelldraft_warr_flat_threat);
 
-constexpr std::array<ThreatAnchor, 13> HEROIC_STRIKE_THREAT_ANCHORS = {{
-    {1, 5},
-    {8, 10},
-    {16, 16},
-    {24, 22},
-    {32, 31},
-    {40, 48},
-    {48, 70},
-    {56, 92},
-    {60, 104},
-    {66, 121},
-    {70, 164},
-    {72, 224},
-    {76, 259},
-}};
-
-int32 HeroicStrikeFlatThreat(uint8 level)
-{
-    if (level <= HEROIC_STRIKE_THREAT_ANCHORS.front().level)
-        return HEROIC_STRIKE_THREAT_ANCHORS.front().flatThreat;
-    if (level >= HEROIC_STRIKE_THREAT_ANCHORS.back().level)
-        return HEROIC_STRIKE_THREAT_ANCHORS.back().flatThreat;
-
-    for (std::size_t index = 0; index + 1 < HEROIC_STRIKE_THREAT_ANCHORS.size(); ++index)
+    bool Load() override
     {
-        ThreatAnchor const& left = HEROIC_STRIKE_THREAT_ANCHORS[index];
-        ThreatAnchor const& right = HEROIC_STRIKE_THREAT_ANCHORS[index + 1];
-        if (level < left.level || level > right.level)
-            continue;
+        Player* player = GetCaster() ? GetCaster()->ToPlayer() : nullptr;
+        if (!player)
+            return false;
 
-        int32 span = int32(right.level) - int32(left.level);
-        int32 offset = int32(level) - int32(left.level);
-        int32 delta = right.flatThreat - left.flatThreat;
-        return left.flatThreat + (delta * offset + span / 2) / span;
+        int32 flatMod = 0;
+        float pctMod = 1.0f;
+        float apPctMod = 0.0f;
+        return GetCustomSpellThreatRule(
+            player,
+            GetSpellInfo()->Id,
+            flatMod,
+            pctMod,
+            apPctMod
+        );
     }
 
-    return HEROIC_STRIKE_THREAT_ANCHORS.back().flatThreat;
-}
+    void HandleOnHit()
+    {
+        Player* player = GetCaster() ? GetCaster()->ToPlayer() : nullptr;
+        Unit* target = GetHitUnit();
+        if (!player || !target)
+            return;
+
+        int32 flatMod = 0;
+        float pctMod = 1.0f;
+        float apPctMod = 0.0f;
+        if (!GetCustomSpellThreatRule(
+            player,
+            GetSpellInfo()->Id,
+            flatMod,
+            pctMod,
+            apPctMod
+        ) || flatMod == 0)
+        {
+            return;
+        }
+
+        std::list<Spell::TargetInfo>* targets = GetSpell()->GetUniqueTargetInfo();
+        if (!targets || targets->empty())
+            return;
+
+        // Match Spell::HandleThreatSpells: flat threat is divided by every
+        // selected unit target, including misses; OnHit naturally runs only for
+        // the successful target, so missed shares remain zero.
+        float threat = float(flatMod) / float(targets->size());
+        target->GetThreatMgr().AddThreat(player, threat, GetSpellInfo(), true);
+    }
+
+    void Register() override
+    {
+        OnHit += SpellHitFn(spell_spelldraft_warr_flat_threat::HandleOnHit);
+    }
+};
 
 class spell_spelldraft_warr_heroic_strike : public SpellScript
 {
@@ -74,16 +96,6 @@ class spell_spelldraft_warr_heroic_strike : public SpellScript
         Unit* target = GetHitUnit();
         if (!caster || !target)
             return;
-
-        // Native Heroic Strike has a rank-specific flat threat row in
-        // spell_threat. The normalized spell is rankless, so reproduce that
-        // numeric progression continuously from the exact native anchors.
-        target->AddThreat(
-            caster,
-            float(HeroicStrikeFlatThreat(caster->GetLevel())),
-            SPELL_SCHOOL_MASK_NORMAL,
-            GetSpellInfo()
-        );
 
         // Ranks 1-9 do not have the Dazed bonus. It starts with native rank 10
         // at level 66, so preserve that breakpoint in the rankless spell.
@@ -193,6 +205,7 @@ class spell_spelldraft_warr_rend : public AuraScript
 
 void AddSpellDraftWarriorScripts()
 {
+    RegisterSpellScript(spell_spelldraft_warr_flat_threat);
     RegisterSpellScript(spell_spelldraft_warr_heroic_strike);
     RegisterSpellScript(spell_spelldraft_warr_rend);
 }
