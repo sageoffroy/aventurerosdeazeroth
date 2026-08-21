@@ -4,9 +4,9 @@
 This stage is intentionally narrow: it mutates already-generated runtime spell
 rows without creating a second scaling system. Numeric scaling fields remain
 owned by the normalizer; this tool only copies reviewed structural behavior
-(such as group targeting/duration) from a native reference spell and, when a
-reviewed design explicitly requires it, updates the duration column of the
-canonical runtime scaling table for that normalized spell.
+(such as group targeting/duration), redirects reviewed internal trigger links to
+their normalized runtime helpers, and, when a reviewed design explicitly
+requires it, updates the duration column of the canonical runtime scaling table.
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ ITEM_REQUIREMENT_FIELDS = tuple(range(50, 68))
 EFFECT_TYPE_FIELDS = tuple(range(71, 74))
 AMOUNT_FIELDS = tuple(range(74, 83))
 EFFECT_BEHAVIOR_FIELDS = tuple(range(83, 131))
+EFFECT_TRIGGER_SPELL_FIELDS = tuple(range(116, 119))
 NAME_FIELDS = tuple(range(136, 152))
 DESCRIPTION_FIELDS = tuple(range(170, 186))
 TOOLTIP_FIELDS = tuple(range(187, 203))
@@ -111,6 +112,11 @@ def load_mutations(path: Path) -> list[dict]:
         normalized["clear_item_requirements"] = bool(
             mutation.get("clear_item_requirements", False)
         )
+        normalized["normalize_trigger_spells"] = validate_positive_spell_list(
+            native_root,
+            "normalize_trigger_spells",
+            mutation.get("normalize_trigger_spells", []),
+        )
         normalized["exclude_from_pool"] = validate_positive_spell_list(
             native_root,
             "exclude_from_pool",
@@ -133,6 +139,7 @@ def load_mutations(path: Path) -> list[dict]:
             normalized["copy_group_behavior"]
             or normalized["copy_duration"]
             or normalized["clear_item_requirements"]
+            or normalized["normalize_trigger_spells"]
             or normalized.get("description")
             or normalized["exclude_from_pool"]
             or normalized["fixed_runtime_duration_ms"] is not None
@@ -159,17 +166,53 @@ def set_text(
         set_u32(row, field, offset)
 
 
+def normalize_trigger_spells(
+    owner: int,
+    row: bytearray,
+    native_helpers: list[int],
+    replacements: dict[int, int],
+    by_id: dict[int, bytearray],
+) -> dict[int, int]:
+    linked: dict[int, int] = {}
+    for native_helper in native_helpers:
+        runtime_helper = replacements.get(native_helper)
+        if runtime_helper is None:
+            raise MutationError(
+                f"mutation {owner}: trigger helper {native_helper} has no normalized runtime spell"
+            )
+        if runtime_helper not in by_id:
+            raise MutationError(
+                f"mutation {owner}: normalized trigger helper {runtime_helper} is missing from Spell.dbc"
+            )
+
+        touched = 0
+        for field in EFFECT_TRIGGER_SPELL_FIELDS:
+            current = u32(row, field)
+            if current == native_helper:
+                set_u32(row, field, runtime_helper)
+                touched += 1
+            elif current == runtime_helper:
+                touched += 1
+        if touched == 0:
+            raise MutationError(
+                f"mutation {owner}: expected trigger helper {native_helper} was not referenced by the runtime spell"
+            )
+        linked[native_helper] = runtime_helper
+    return linked
+
+
 def patch_spell_dbc(
     path: Path,
     mutations: list[dict],
     replacements: dict[int, int],
-) -> dict[int, int]:
+) -> tuple[dict[int, int], dict[int, dict[int, int]]]:
     fields, record_size, records, strings, trailing = read_dbc(path)
     if fields != SPELL_FIELDS or record_size != SPELL_RECORD_SIZE:
         raise MutationError(f"unexpected Spell.dbc layout: {fields}/{record_size}")
 
     by_id = {u32(row, SPELL_ID): row for row in records}
     runtime_ids: dict[int, int] = {}
+    trigger_links: dict[int, dict[int, int]] = {}
 
     for mutation in mutations:
         native_root = int(mutation["native_root"])
@@ -198,6 +241,14 @@ def patch_spell_dbc(
             set_u32(target, DURATION_INDEX, u32(source, DURATION_INDEX))
         if mutation["clear_item_requirements"]:
             clear_item_requirements(target)
+        if mutation["normalize_trigger_spells"]:
+            trigger_links[native_root] = normalize_trigger_spells(
+                native_root,
+                target,
+                mutation["normalize_trigger_spells"],
+                replacements,
+                by_id,
+            )
         description = mutation.get("description")
         if description:
             set_text(target, DESCRIPTION_FIELDS, strings, str(description))
@@ -236,8 +287,14 @@ def patch_spell_dbc(
             u32(target, field) != 0 for field in ITEM_REQUIREMENT_FIELDS
         ):
             raise MutationError(f"mutation {native_root}: item requirement survived")
+        for native_helper, runtime_helper in trigger_links.get(native_root, {}).items():
+            values = [u32(target, field) for field in EFFECT_TRIGGER_SPELL_FIELDS]
+            if native_helper in values or runtime_helper not in values:
+                raise MutationError(
+                    f"mutation {native_root}: trigger helper remap {native_helper}->{runtime_helper} failed validation"
+                )
 
-    return runtime_ids
+    return runtime_ids, trigger_links
 
 
 def patch_runtime_scaling_duration(
@@ -385,7 +442,7 @@ def main() -> None:
     try:
         mutations = load_mutations(args.mutations.expanduser().resolve())
         replacements = load_replacements(args.resolved.expanduser().resolve())
-        runtime_ids = patch_spell_dbc(
+        runtime_ids, trigger_links = patch_spell_dbc(
             args.dbc_dir.expanduser().resolve() / "Spell.dbc",
             mutations,
             replacements,
@@ -408,10 +465,15 @@ def main() -> None:
         native_root = int(mutation["native_root"])
         runtime_id = runtime_ids[native_root]
         fixed = mutation.get("fixed_runtime_duration_ms")
+        links = trigger_links.get(native_root, {})
+        link_text = ",".join(
+            f"{native}->{runtime}" for native, runtime in sorted(links.items())
+        ) or "none"
         print(
             f"  {native_root} -> {runtime_id} {mutation.get('name', '')}: "
             f"behavior_source={mutation['behavior_source_spell_id']}, "
             f"group={mutation['copy_group_behavior']}, duration_source={mutation['copy_duration']}, "
+            f"trigger_helpers={link_text}, "
             f"fixed_runtime_duration_ms={fixed}, scaling_rows={duration_rows.get(runtime_id, 0)}"
         )
     print(f"  superseded standalone draft cards removed: {removed}")
