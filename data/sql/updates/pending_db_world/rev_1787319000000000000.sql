@@ -78,3 +78,14 @@ INSERT INTO `spell_group` (`id`, `spell_id`) VALUES
 (1059, 206343), -- Thunder Clap attack-speed slow
 (1062, 201160), -- Demoralizing Shout attack-power reduction
 (1091, 200469); -- Commanding Shout stamina/health-buff group
+
+-- A small number of baseline Warrior auras rely on exact-ID spell_proc_event
+-- overrides rather than DBC proc metadata alone. Copy those rows verbatim to
+-- the normalized IDs so their event filters remain WotLK-identical.
+DELETE FROM `spell_proc_event`
+WHERE `entry` IN (201719, 223920);
+
+INSERT INTO `spell_proc_event`
+(`entry`, `SchoolMask`, `SpellFamilyName`, `SpellFamilyMask0`, `SpellFamilyMask1`, `SpellFamilyMask2`, `procFlags`, `procEx`, `procPhase`, `ppmRate`, `CustomChance`, `Cooldown`) VALUES
+(201719, 0, 4, 778044484, 4212549, 0, 0, 2, 0, 0, 0, 0), -- Recklessness
+(223920, 0, 0, 0, 0, 0, 0, 2048, 0, 0, 0, 0);          -- Spell Reflection
