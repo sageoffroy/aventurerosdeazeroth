@@ -20,6 +20,13 @@
       "normalize_trigger_spells": [34913],
       "exclude_from_pool": [34913],
       "reason": "Molten Armor's reactive fire damage is executed by the separate ranked helper family rooted at 34913. The normalized armor must trigger the normalized helper so that reactive damage follows the same player-level scaling pipeline instead of dealing the native level-62 value at level 1. The helper remains internal and is never offered as a standalone draft card."
+    },
+    {
+      "native_root": 42955,
+      "name": "Conjure Refreshment",
+      "behavior_source_spell_id": 42955,
+      "exclude_from_pool": [587, 5504, 43987],
+      "reason": "Conjure Refreshment is the single Mage food/drink utility card. Separate Conjure Food and Conjure Water choices are redundant once one refreshment restores both health and mana, and Ritual of Refreshment remains excluded. The created consumable still needs a reviewed level-scaling solution before approval."
     }
   ]
 }
