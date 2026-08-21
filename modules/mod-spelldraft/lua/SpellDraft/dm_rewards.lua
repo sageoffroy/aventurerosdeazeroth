@@ -1,9 +1,12 @@
 -- Aventureros de Azeroth - puente Dungeon Master -> metaprogresion SpellDraft.
 --
--- Dungeon Master ya persiste el total de pisos roguelike por personaje en
--- dm_roguelike_player_stats. Este script observa ese contador y convierte solo
--- el delta nuevo en Honor de cuenta. No toca el submodulo Dungeon Master y no
--- usa dm_player_stats porque ese contador tambien sube dentro del Roguelike.
+-- Dungeon Master persiste el total de pisos roguelike por personaje en
+-- dm_roguelike_player_stats. Este script convierte solamente los deltas nuevos
+-- en Honor de cuenta. El checkpoint conserva player_guid -> account_id, por lo
+-- que un superviviente nuevo puede cobrar progreso pendiente de uno anterior.
+--
+-- No usamos dm_player_stats: Dungeon Master tambien incrementa ese contador
+-- durante el Roguelike y pagar ambos produciria recompensas dobles.
 
 SpellDraftDungeonRewards = SpellDraftDungeonRewards or {}
 local M = SpellDraftDungeonRewards
@@ -69,8 +72,9 @@ local POLL_SECONDS = ConfigNumber(
 )
 local POLL_MS = POLL_SECONDS * 1000
 
--- La DB Execute de ALE es asincrona. Este cache es la autoridad durante la
--- sesion para impedir que dos polls cercanos paguen el mismo delta dos veces.
+-- ALE encola CharDBExecute. Este cache es la autoridad de checkpoints durante
+-- la sesion y evita acreditar dos veces el mismo delta antes de que la escritura
+-- asincrona llegue a MySQL.
 local checkpointCache = {}
 
 local function IsBotPlayer(player)
@@ -137,8 +141,7 @@ local function SaveCheckpoint(guid, accountId, state)
     ))
 end
 
-local function LoadCheckpoint(player, stats, force)
-    local guid = player:GetGUIDLow()
+local function LoadCheckpointForGuid(guid, accountId, stats, force)
     if checkpointCache[guid] and not force then
         return checkpointCache[guid]
     end
@@ -156,38 +159,103 @@ local function LoadCheckpoint(player, stats, force)
             highestTier = query:GetUInt32(2),
             runs = query:GetUInt32(3),
         }
-        checkpointCache[guid] = state
-        return state
+
+        -- GUIDs no deberian migrar entre cuentas, pero mantener el mapping
+        -- actualizado hace el checkpoint autocorrectivo ante datos importados.
+        if state.accountId ~= accountId then
+            state.accountId = accountId
+            SaveCheckpoint(guid, accountId, state)
+        else
+            checkpointCache[guid] = state
+        end
+        return checkpointCache[guid]
     end
 
-    -- Primera vez que instalamos el puente: tomamos los contadores actuales
-    -- como baseline. No regalamos Honor retroactivo por runs de desarrollo que
-    -- ocurrieron antes de que existiera esta economia.
+    -- Primera aparicion despues de instalar el puente: los contadores actuales
+    -- son baseline. No acreditamos runs historicas hechas durante desarrollo.
     local baseline = {
-        accountId = AccountId(player),
+        accountId = accountId,
         floors = stats.floors,
         highestTier = stats.highestTier,
         runs = stats.runs,
     }
-    SaveCheckpoint(guid, baseline.accountId, baseline)
+    SaveCheckpoint(guid, accountId, baseline)
     return checkpointCache[guid]
 end
 
-local function ResetCheckpointIfStatsWentBack(player, stats, checkpoint)
-    if stats.floors >= checkpoint.floors
-        and stats.runs >= checkpoint.runs then
-        return false
+local function EnsureCharacterRegistered(player, force)
+    local guid = player:GetGUIDLow()
+    local accountId = AccountId(player)
+    if accountId == 0 then
+        return nil
     end
 
-    -- Esto solo deberia pasar si el administrador resetea las estadisticas de
-    -- Dungeon Master. Rebaselinar evita bloquear futuras recompensas.
-    local state = {
-        floors = stats.floors,
-        highestTier = stats.highestTier,
-        runs = stats.runs,
-    }
-    SaveCheckpoint(player:GetGUIDLow(), AccountId(player), state)
-    return true
+    local stats = ReadRoguelikeStats(guid)
+    return LoadCheckpointForGuid(guid, accountId, stats, force)
+end
+
+local function ReadAccountRows(accountId)
+    local rows = {}
+    local query = CharDBQuery(string.format(
+        "SELECT c.player_guid, c.roguelike_floors_credited, "
+        .. "c.highest_tier_seen, c.roguelike_runs_seen, "
+        .. "COALESCE(r.total_floors_cleared, 0), "
+        .. "COALESCE(r.highest_tier, 0), COALESCE(r.total_runs, 0) "
+        .. "FROM spelldraft_dm_reward_checkpoint c "
+        .. "LEFT JOIN dm_roguelike_player_stats r ON r.guid = c.player_guid "
+        .. "WHERE c.account_id = %u",
+        accountId
+    ))
+
+    if not query then
+        return rows
+    end
+
+    repeat
+        local guid = query:GetUInt32(0)
+        table.insert(rows, {
+            guid = guid,
+            dbCheckpoint = {
+                accountId = accountId,
+                floors = query:GetUInt32(1),
+                highestTier = query:GetUInt32(2),
+                runs = query:GetUInt32(3),
+            },
+            stats = {
+                floors = query:GetUInt32(4),
+                highestTier = query:GetUInt32(5),
+                runs = query:GetUInt32(6),
+            },
+        })
+    until not query:NextRow()
+
+    return rows
+end
+
+local function ProcessRow(accountId, row)
+    local checkpoint = checkpointCache[row.guid] or row.dbCheckpoint
+    checkpointCache[row.guid] = checkpoint
+
+    local stats = row.stats
+
+    -- Si el administrador reseteo las estadisticas de Dungeon Master, hacemos
+    -- un nuevo baseline. Nunca usamos un contador decreciente para generar Honor.
+    if stats.floors < checkpoint.floors or stats.runs < checkpoint.runs then
+        SaveCheckpoint(row.guid, accountId, stats)
+        return 0, stats.highestTier
+    end
+
+    local floorDelta = math.max(0, stats.floors - checkpoint.floors)
+    local changed = floorDelta > 0
+        or stats.highestTier ~= checkpoint.highestTier
+        or stats.runs ~= checkpoint.runs
+        or checkpoint.accountId ~= accountId
+
+    if changed then
+        SaveCheckpoint(row.guid, accountId, stats)
+    end
+
+    return floorDelta, stats.highestTier
 end
 
 function M.CheckPlayer(player)
@@ -200,30 +268,35 @@ function M.CheckPlayer(player)
         return 0
     end
 
-    local guid = player:GetGUIDLow()
     local accountId = AccountId(player)
     if accountId == 0 then
         return 0
     end
 
-    local stats = ReadRoguelikeStats(guid)
-    local checkpoint = LoadCheckpoint(player, stats, false)
+    -- Registrar al superviviente actual antes de consultar la cuenta deja un
+    -- mapping durable player_guid -> account_id incluso si luego ese personaje
+    -- queda fuera o se elimina de la tabla characters.
+    EnsureCharacterRegistered(player, false)
 
-    if ResetCheckpointIfStatsWentBack(player, stats, checkpoint) then
-        return 0
+    local totalFloorDelta = 0
+    local highestTier = 0
+
+    for _, row in ipairs(ReadAccountRows(accountId)) do
+        local floorDelta, rowTier = ProcessRow(accountId, row)
+        totalFloorDelta = totalFloorDelta + floorDelta
+        highestTier = math.max(highestTier, rowTier or 0)
     end
 
-    local floorDelta = math.max(0, stats.floors - checkpoint.floors)
-    local reward = floorDelta * HONOR_PER_ROGUELIKE_FLOOR
+    local reward = totalFloorDelta * HONOR_PER_ROGUELIKE_FLOOR
 
-    if floorDelta > 0 and reward > 0 then
+    if reward > 0 then
         local total = SpellDraftTalents.GrantAccountHonor(player, reward)
 
         player:SendBroadcastMessage(string.format(
             "[Metaprogresión] +%u Honor de cuenta por %u piso%s de Roguelike.",
             reward,
-            floorDelta,
-            floorDelta == 1 and "" or "s"
+            totalFloorDelta,
+            totalFloorDelta == 1 and "" or "s"
         ))
         player:SendBroadcastMessage(string.format(
             "[Metaprogresión] Honor de cuenta: %u",
@@ -231,20 +304,8 @@ function M.CheckPlayer(player)
         ))
     end
 
-    if SpellDraftTalents.RecordRoguelikeProgress
-        and stats.highestTier > (checkpoint.highestTier or 0) then
-        SpellDraftTalents.RecordRoguelikeProgress(
-            player,
-            stats.highestTier,
-            false
-        )
-    end
-
-    if floorDelta > 0
-        or stats.highestTier ~= checkpoint.highestTier
-        or stats.runs ~= checkpoint.runs
-        or checkpoint.accountId ~= accountId then
-        SaveCheckpoint(guid, accountId, stats)
+    if SpellDraftTalents.RecordRoguelikeProgress and highestTier > 0 then
+        SpellDraftTalents.RecordRoguelikeProgress(player, highestTier, false)
     end
 
     return reward
@@ -267,20 +328,10 @@ local function OnLogin(_, player)
         return
     end
 
-    local guid = player:GetGUIDLow()
-    local stats = ReadRoguelikeStats(guid)
-    LoadCheckpoint(player, stats, true)
+    EnsureCharacterRegistered(player, true)
 
-    -- Damos tiempo a que termine el resto del login de SpellDraft antes del
-    -- primer chequeo y luego mantenemos un poll liviano mientras siga online.
-    ScheduleNext(guid, 2500)
-end
-
-local function OnLogout(_, player)
-    if not player then
-        return
-    end
-    checkpointCache[player:GetGUIDLow()] = nil
+    -- Damos tiempo a que termine el login de SpellDraft antes del primer poll.
+    ScheduleNext(player:GetGUIDLow(), 2500)
 end
 
 local function OnChat(_, player, msg)
@@ -299,7 +350,6 @@ local function OnChat(_, player, msg)
 end
 
 RegisterPlayerEvent(3, OnLogin)   -- PLAYER_EVENT_ON_LOGIN
-RegisterPlayerEvent(4, OnLogout)  -- PLAYER_EVENT_ON_LOGOUT
 RegisterPlayerEvent(18, OnChat)   -- PLAYER_EVENT_ON_CHAT
 RegisterPlayerEvent(19, OnChat)   -- PLAYER_EVENT_ON_WHISPER
 
