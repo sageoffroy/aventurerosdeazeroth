@@ -15,13 +15,3 @@ install(
     FILES_MATCHING
         PATTERN "*.lua"
 )
-
-# draft_core.inc is intentionally not a .lua file: ALE must not auto-execute it.
-# The small draft.lua wrapper loads it explicitly after installing the talent
-# integration hooks.
-install(
-    FILES
-        "${SPELLDRAFT_MODULE_DIR}/lua/SpellDraft/draft_core.inc"
-    DESTINATION
-        "bin/lua_scripts/SpellDraft"
-)
