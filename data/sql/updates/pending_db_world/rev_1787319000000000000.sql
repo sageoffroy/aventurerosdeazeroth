@@ -79,9 +79,9 @@ INSERT INTO `spell_group` (`id`, `spell_id`) VALUES
 (1062, 201160), -- Demoralizing Shout attack-power reduction
 (1091, 200469); -- Commanding Shout stamina/health-buff group
 
--- A small number of baseline Warrior auras rely on exact-ID spell_proc_event
--- overrides rather than DBC proc metadata alone. Copy those rows verbatim to
--- the normalized IDs so their event filters remain WotLK-identical.
+-- A small number of baseline Warrior auras rely on exact-ID proc overrides
+-- rather than DBC proc metadata alone. Copy the legacy and current AzerothCore
+-- representations so behavior does not depend on which loader owns the row.
 DELETE FROM `spell_proc_event`
 WHERE `entry` IN (201719, 223920);
 
@@ -89,3 +89,11 @@ INSERT INTO `spell_proc_event`
 (`entry`, `SchoolMask`, `SpellFamilyName`, `SpellFamilyMask0`, `SpellFamilyMask1`, `SpellFamilyMask2`, `procFlags`, `procEx`, `procPhase`, `ppmRate`, `CustomChance`, `Cooldown`) VALUES
 (201719, 0, 4, 778044484, 4212549, 0, 0, 2, 0, 0, 0, 0), -- Recklessness
 (223920, 0, 0, 0, 0, 0, 0, 2048, 0, 0, 0, 0);          -- Spell Reflection
+
+DELETE FROM `spell_proc`
+WHERE `SpellId` IN (201719, 223920);
+
+INSERT INTO `spell_proc`
+(`SpellId`, `SchoolMask`, `SpellFamilyName`, `SpellFamilyMask0`, `SpellFamilyMask1`, `SpellFamilyMask2`, `ProcFlags`, `SpellTypeMask`, `SpellPhaseMask`, `HitMask`, `AttributesMask`, `DisableEffectsMask`, `ProcsPerMinute`, `Chance`, `Cooldown`, `Charges`) VALUES
+(201719, 0, 4, 778044484, 4212549, 0, 0, 1, 2, 0, 8, 0, 0, 0, 0, 0), -- Recklessness
+(223920, 0, 0, 0, 0, 0, 0, 0, 0, 2048, 0, 0, 0, 0, 0, 0);          -- Spell Reflection
