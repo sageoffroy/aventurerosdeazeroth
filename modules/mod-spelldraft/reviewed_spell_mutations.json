@@ -26,7 +26,37 @@
       "name": "Conjure Refreshment",
       "behavior_source_spell_id": 42955,
       "exclude_from_pool": [587, 5504, 43987],
-      "reason": "Conjure Refreshment is the single Mage food/drink utility card. Separate Conjure Food and Conjure Water choices are redundant once one refreshment restores both health and mana, and Ritual of Refreshment remains excluded. The created consumable still needs a reviewed level-scaling solution before approval."
+      "consumable_scaling": {
+        "item_entry": 43518,
+        "wrapper_spell_id": 61828,
+        "runtime_max_level": 80,
+        "duration_ms": 30000,
+        "helpers": [
+          {
+            "native_spell_id": 61829,
+            "runtime_spell_id": 261829,
+            "effect_index": 0,
+            "anchors": [
+              { "level": 1, "amount": 56 },
+              { "level": 65, "amount": 1250 },
+              { "level": 74, "amount": 3080 },
+              { "level": 80, "amount": 3750 }
+            ]
+          },
+          {
+            "native_spell_id": 61830,
+            "runtime_spell_id": 261830,
+            "effect_index": 1,
+            "anchors": [
+              { "level": 1, "amount": 54 },
+              { "level": 65, "amount": 1200 },
+              { "level": 74, "amount": 2140 },
+              { "level": 80, "amount": 3200 }
+            ]
+          }
+        ]
+      },
+      "reason": "Conjure Refreshment is the single Mage food/drink utility card. Separate Conjure Food and Conjure Water choices are redundant once one refreshment restores both health and mana, and Ritual of Refreshment remains excluded. The created Mana Pie uses reviewed internal helper clones wired into the canonical custom_spell_scaling.tsv. Level 65/74/80 anchors reproduce Mana Biscuit, Mana Pie and Mana Strudel values; level 1 uses the same low-level offset rule as normalized combat spells."
     }
   ]
 }
