@@ -54,7 +54,7 @@ local function showShop(player)
     )
 end
 
-local function handleCommand(_, player, command, _)
+local function handleCommand(_event, player, command, _chatHandler)
     if not player or not isAdventurer(player) or not command then
         return
     end
